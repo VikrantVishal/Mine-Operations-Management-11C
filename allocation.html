@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Deposit 11C shift reporting — Allocation</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style1.css">
+<!-- Preload background engine scripts as early as possible so the animated
+     background is ready with no flash/delay once the page paints -->
+<link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js" as="script">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.fog.min.js" as="script">
+<!-- Loaded with "defer" so the browser starts fetching them immediately in parallel -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.fog.min.js"></script>
+
+<style>
+  /* Sidebar user badge (replaces the static "Mining Operations Tracker" tagline) */
+  .sb-user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .sb-user-row .user-badge-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sb-user-row .admin-tag {
+    font-size: 9px;
+    font-weight: 700;
+    color: #000;
+    background: var(--accent);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 4px;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+  }
+  .sb-user-row .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    padding: 3px 10px;
+    border-radius: var(--r);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: all 0.18s;
+    flex-shrink: 0;
+  }
+  .sb-user-row .btn-outline:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+<div id="vanta-bg"></div>
+
+<div class="sbo" id="sbo" onclick="closeSB()"></div>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="sb-head">
+    <h2>🌱Deposit 11C🌱</h2>
+    <div class="sb-user-row" id="sidebarUserBadge"></div>
+  </div>
+  <div class="sb-fixed">
+    <div class="sb-section">Reports</div>
+    <div class="sb-tile" id="sb-daily" onclick="setReport('daily')"><span class="icon">📋</span>Daily Report</div>
+    <div class="sb-tile" id="sb-cumul" onclick="setReport('cumul')"><span class="icon">📊</span>Cumulative Report</div>
+    <div class="sb-tile" onclick="location.href='shift-report.html'"><span class="icon">🧾</span>Shift Report Generator</div>
+    <div class="sb-tile" onclick="location.href='allocation-register.html'"><span class="icon">📑</span>Allocation Register</div>
+    <div class="sb-section">Master Data</div>
+    <div class="sb-tile" onclick="goResources()"><span class="icon">📁</span>Resources (Master List)</div>
+
+    <!-- SHIFT TOGGLE -->
+    <div class="sb-section">View</div>
+    <div class="toggle-row">
+      <div><div class="toggle-lbl">Light / Dark</div><div class="toggle-sub" id="theme-toggle-lbl">Dark theme enabled</div></div>
+      <label class="ts"><input type="checkbox" id="theme-toggle" onchange="onThemeToggle()"><span class="ts-slider"></span></label>
+    </div>
+  </div>
+
+  <!-- DATE LOG — the only part of the sidebar that scrolls -->
+  <div class="sb-log-wrap">
+    <div class="sb-section">Report Log</div>
+    <div class="sb-scroll" id="date-log"></div>
+  </div>
+
+  <div class="sb-foot">
+    <div class="sb-credit">Designed and managed by Vikrant Vishal 😎</div>
+  </div>
+</div>
+
+<!-- APP HEADER (unified with main-menu.html / Attendance Portal) -->
+<header class="app-header">
+  <div class="header-top">
+    <div class="titles">
+      <button class="menu-btn" onclick="toggleSB()" aria-label="Open menu">☰</button>
+      <div class="logo-icon">📝</div>
+      <div>
+        <h1>DEPOSIT 11C</h1>
+        <div class="sub">Mining Operations</div>
+      </div>
+    </div>
+    <div class="home-date-group">
+      <a class="home-btn" href="index.html" title="Home" aria-label="Back to Home">🏠</a>
+      <!-- Moved datetime-chip here -->
+      <div class="datetime-chip">
+        <div class="time" id="clock">--:--</div>
+        <div id="topdate">--</div>
+      </div>
+    </div>
+  </div>
+  <div class="header-bottom">
+    <!-- <div id="sync-dot" class="sync-dot"></div> -->
+  </div>
+</header>
+
+<!-- SHIFT BANNER -->
+<div id="shift-banner">
+  <div class="sb-item"><span class="sb-label">Date</span>&nbsp;<span class="sb-val" id="bn-date">—</span></div>
+  <span class="sb-sep">·</span>
+  <div class="sb-item"><span id="bn-shift" class="sb-val sshift-badge ss1">—</span></div>
+  <span class="sb-sep">·</span>
+  <div class="sb-item"><span class="sb-label">I/C</span>&nbsp;<span class="sb-val" id="bn-ic">—</span></div>
+</div>
+
+<!-- APP BODY -->
+<div id="app-body">
+  <div class="tabs-wrap" id="tabs-wrap"></div>
+  <div id="tab-content"></div>
+
+<div class="toast" id="toast"></div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" style="display:none;position:fixed;inset:0;background:rgba(10,14,20,0.92);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;color:#f5a623;letter-spacing:1px">🌱Deposit 11C🌱</div>
+  <div style="font-size:13px;color:#6a8099">Loading data...</div>
+  <div style="width:48px;height:48px;border:3px solid #243040;border-top-color:#f5a623;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</div>
+
+<!-- FIREBASE (Firestore) — shared config with the Deposit-11C Attendance System -->
+<script type="module">
+  import {
+    db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp,
+    attendanceDocId, esc, sortGroups
+  } from "./firebase-config.js";
+  import { requireAuth, renderUserBadge } from "./auth.js";
+  // Same login/session system used by Attendance Management. If nobody is
+  // signed in this redirects to login.html?redirect=allocation.html(+query),
+  // preserving ?auto=1 so the user lands back on the exact page after login.
+  window.__d11cAuthed = !!requireAuth();
+  // Populate the sidebar with the signed-in user's name + a Logout button.
+  // renderUserBadge() is the exact same function main-menu.html uses, so the
+  // displayed name (from the active session) and the Logout behaviour
+  // (session clear + redirect to login.html) are identical to the rest of
+  // the portal — nothing here is hard-coded.
+  if (window.__d11cAuthed) {
+    renderUserBadge('sidebarUserBadge');
+    // Prefix the sidebar's user name with 👤 without touching auth.js's
+    // shared renderUserBadge() (used unchanged on other pages).
+    const sbNameEl = document.querySelector('#sidebarUserBadge .user-badge-name');
+    if (sbNameEl) sbNameEl.prepend('👤 ');
+  }
+  window.fb = { db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp, attendanceDocId, esc, sortGroups };
+  window.esc = esc;
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════
+const SHIFT_NAMES = {1:'First Shift',2:'Second Shift',3:'Night Shift'};
+const SAVE_TABS = ['manpower','production','drilling','machinery','allocation','remarks'];
+// Tab order: Overview, Manpower, Allocation, Production, Drilling, Machinery, Remarks
+const TAB_ORDER = ['overview','manpower','allocation','production','drilling','machinery','remarks'];
+const TAB_LABELS = {overview:'Overview',manpower:'Manpower',allocation:'Allocation',production:'Production',drilling:'Drilling',machinery:'Machinery',remarks:'Remarks'};
+// Maps each daily-report tab to the standalone page that now holds it
+// (this app used to be a single-page tool with in-page tab switching;
+// each tab now lives in its own HTML file, linked here).
+const PAGE_URLS = {overview:'overview.html',manpower:'manpower.html',allocation:'allocation.html',production:'production.html',drilling:'drilling.html',machinery:'machinery.html',remarks:'remarks.html'};
+
+// Groups (besides a machinery's own equipment group) that are always
+// eligible as Helpers for any allocation row — general labour pools.
+const HELPER_POOL_GROUPS = ['HELPER', 'RS-04'];
+
+// Equipment groups that should never appear as a selectable Group on this
+// page (chip filter or per-row Group dropdown) — these aren't allocated
+// via the Machinery Allocation workflow.
+const EXCLUDED_GROUPS = ['AMBULANCE', 'DIESEL BOWSER', 'LIGHT VEHICLE', 'WATER TANKER'];
+
+// Some equipment groups don't have their own attendance group to draw
+// Operators/Helpers from — Water Sprinklers are run by Dumper operators,
+// so Operator/Helper eligibility for that group is sourced from DUMPER
+// instead of WATER SPRINKLER. Rock Breakers are run by Shovel operators,
+// so their Operator pool is sourced from SHOVEL. Keys/values are matched
+// case-insensitively.
+const OPERATOR_SOURCE_GROUP = { 'WATER SPRINKLER': 'DUMPER', 'ROCK BREAKER': 'SHOVEL' };
+function operatorSourceGroup(group){
+  const key = String(group||'').trim().toUpperCase();
+  return OPERATOR_SOURCE_GROUP[key] || group;
+}
+
+// Rock Breaker's Helper pool is narrower than the normal rule (own/source
+// group + general HELPER/RS-04 pool, see helpersForGroup): it should only
+// draw from Shovel + RS-04, excluding the general HELPER pool. Any group
+// listed here uses exactly this list of source groups for Helpers instead
+// of the default HELPER_POOL_GROUPS behavior. Keys matched case-insensitively.
+const HELPER_SOURCE_GROUPS_OVERRIDE = { 'ROCK BREAKER': ['SHOVEL', 'RS-04'] };
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let state = { report:'daily', currentTab:'allocation', editMode:{} };
+let isLightTheme = false;
+let allocGroupFilter = 'all';
+let allocSearchQuery = '';
+
+// ═══════════════════════════════════════════════════
+// STORAGE HELPERS (local — UI preferences only, e.g. theme
+// and which date/shift is currently open. All report data
+// and master lists live in Firestore, never in localStorage.)
+// ═══════════════════════════════════════════════════
+const ls = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e) { return null; } };
+const ss = (k,v) => localStorage.setItem(k, JSON.stringify(v));
+isLightTheme = ls('theme_mode') === 'light';
+
+// ═══════════════════════════════════════════════════
+// FIREBASE (Firestore) DATA LAYER
+// Same Firebase project/config as the Deposit-11C Attendance
+// System (see firebase-config.js). Collections used here:
+//   shiftReports/{date}_shift{n}  — one doc per date+shift, holds the full shift report (incl. allocationRows)
+//   machinery/{machineryId}       — machinery master list; the Machinery ID is the doc ID (permanent unique identifier)
+// (Manpower is no longer a master list here — see mark-attendance.html → manpower.html)
+// ═══════════════════════════════════════════════════
+function fbCol(name){ return window.fb.collection(window.fb.db, name); }
+function fbDocRef(name,id){ return window.fb.doc(window.fb.db, name, String(id)); }
+
+
+// ═══════════════════════════════════════════════════
+// RESOURCES (Machinery master list — Firestore)
+// Operator and Helper selection come from the attendance data saved
+// via manpower.html (see the ATTENDANCE section below), same as
+// production.html / drilling.html.
+// ═══════════════════════════════════════════════════
+let resources = { machinery:[] };
+
+async function loadResources(){
+  try{
+    const machSnap = await window.fb.getDocs(fbCol('machinery'));
+    let machinery = []; machSnap.forEach(d=>machinery.push({ id: d.id, ...d.data() }));
+    resources = { machinery };
+  }catch(e){
+    console.warn('Failed to load machinery master list from Firestore', e);
+    resources = { machinery: [] };
+  }
+}
+
+// Machinery imported as Inactive is kept in the master list (for
+// historical shift-report records) but hidden from selection here.
+function activeMachinery(){ return resources.machinery.filter(m=>m.status!=='Inactive'); }
+function machineryOptionLabel(m){ return m.name || m.id; }
+function machineryDisplayName(id){
+  if(!id) return '—';
+  const machine=resources.machinery.find(m=>m.id===id);
+  return machine?.name || id;
+}
+// Distinct equipment groups present in the active machinery master list,
+// in the app's standard group display order — excluding groups that
+// aren't allocated via this page (see EXCLUDED_GROUPS).
+function machineryGroups(){
+  const set = new Set(
+    activeMachinery()
+      .map(m=>String(m.group||'').trim())
+      .filter(g => g && !EXCLUDED_GROUPS.includes(g.toUpperCase()))
+  );
+  return window.fb.sortGroups(Array.from(set));
+}
+
+
+// ═══════════════════════════════════════════════════
+// SHIFT DATA
+// ═══════════════════════════════════════════════════
+function today() { return new Date().toISOString().split('T')[0]; }
+function getShiftDate() { return ls('shift_date') || today(); }
+function getShiftNum() { return ls('shift_num') || 1; }
+function getCurrentKey() { return `${getShiftDate()}_shift${getShiftNum()}`; }
+
+// Maps this app's shift numbers (1/2/3) to the Attendance System's shift
+// keys ('first'/'second'/'night'), used to look up the "attendance"
+// collection written by mark-attendance.html.
+const SHIFT_KEY_BY_NUM = { 1: 'first', 2: 'second', 3: 'night' };
+
+function defaultSD() {
+  return {
+    date:getShiftDate(), shift:getShiftNum(), ic:'', saved:false,
+    tabSaved:{}, // which tabs have been saved
+    attendance:{}, attendanceRemarks:{},
+    otPersonnel:[], othersPersonnel:[],
+    production:{rom:'',waste:'',sp:'',firstHour:'',firstHourRemarks:'',lastHour:'',lastHourRemarks:'',affectedBy:[''],plantStoppage:[{reason:'',hours:'',minutes:''}]},
+    shovelRows:[], dumperRows:[],
+    drillRows:[], drillSummary:{totalM:0,totalH:0},
+    allocationRows:[],
+    machinery:{},
+    remarksWork:'', remarksOther:'',
+    photos:[], machPhotos:{}
+  };
+}
+
+
+let SD = {};
+
+async function loadSD() {
+  const id = getCurrentKey();
+  try{
+    const snap = await window.fb.getDoc(fbDocRef('shiftReports', id));
+    SD = snap.exists() ? snap.data() : defaultSD();
+  }catch(e){
+    console.warn('Failed to load shift report from Firestore', e);
+    SD = defaultSD();
+  }
+  SD.allocationRows = SD.allocationRows || [];
+}
+async function saveSD() {
+  SD.saved = true;
+  try{
+    await window.fb.setDoc(fbDocRef('shiftReports', getCurrentKey()), SD);
+    return true;
+  }catch(e){
+    console.warn('Failed to save shift report to Firestore', e);
+    return false;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════
+// ATTENDANCE (read from the "attendance" collection —
+// the same records mark-attendance.html submits, and the
+// same source manpower.html reads. Operator/Helper dropdowns
+// below are populated from this instead of a separate
+// employee master list.)
+// ═══════════════════════════════════════════════════
+let attendanceDoc = null; // { date, shift, entries:{empId:{status,name,group,...}}, otEntries:{...}, ... } or null if not yet submitted
+
+async function loadAttendanceData() {
+  const shiftKey = SHIFT_KEY_BY_NUM[getShiftNum()] || 'first';
+  const id = window.fb.attendanceDocId(getShiftDate(), shiftKey);
+  try {
+    const snap = await window.fb.getDoc(window.fb.doc(window.fb.db, 'attendance', id));
+    attendanceDoc = snap.exists() ? snap.data() : null;
+  } catch (e) {
+    console.warn('Failed to load attendance data from Firestore', e);
+    attendanceDoc = null;
+  }
+}
+
+// Employees marked Present (normal duty or OT) for the given group(s) in the
+// loaded attendance record. groupNames can be a single group string or an
+// array of group names (matched case-insensitively, de-duplicated by id).
+function presentByGroup(groupNames) {
+  if (!attendanceDoc) return [];
+  const targets = (Array.isArray(groupNames) ? groupNames : [groupNames])
+    .map(g => String(g || '').trim().toUpperCase())
+    .filter(Boolean);
+  if (!targets.length) return [];
+  const seen = new Set();
+  const list = [];
+  const addIfMatch = (id, e) => {
+    const g = String(e.group || '').trim().toUpperCase();
+    if (!targets.includes(g)) return;
+    if (seen.has(id)) return;
+    seen.add(id);
+    list.push({ id, name: e.name });
+  };
+  Object.entries(attendanceDoc.entries || {}).forEach(([id, e]) => {
+    const isPresent = e.status === 'Present' || e.status === 'Present (Mutual)';
+    if (isPresent) addIfMatch(id, e);
+  });
+  Object.entries(attendanceDoc.otEntries || {}).forEach(([id, e]) => addIfMatch(id, e));
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  return list;
+}
+
+// Operators for an allocation row: present employees belonging to the
+// row's own equipment Group (or its override source group — see
+// OPERATOR_SOURCE_GROUP, e.g. Water Sprinkler draws from Dumper).
+function operatorsForGroup(group){ return presentByGroup(operatorSourceGroup(group)); }
+
+// Helpers for an allocation row: present employees belonging to the row's
+// own equipment Group (or its override source group), plus the general
+// HELPER and RS-04 labour pools — unless the group has a narrower,
+// explicit override list (see HELPER_SOURCE_GROUPS_OVERRIDE, e.g. Rock
+// Breaker, which should not draw from the general HELPER pool).
+function helpersForGroup(group){
+  const key = String(group||'').trim().toUpperCase();
+  const targets = HELPER_SOURCE_GROUPS_OVERRIDE[key] || [operatorSourceGroup(group), ...HELPER_POOL_GROUPS];
+  return presentByGroup(targets);
+}
+
+// The Operator/Helper dropdowns stay unavailable until manpower.html has
+// been saved for the currently selected date & shift.
+function manpowerSaved() { return !!SD.tabSaved?.manpower; }
+
+// Debounced auto-save to Firestore (Firestore's own offline persistence,
+// enabled in firebase-config.js, keeps this instant and safe even offline).
+let _autoSaveTimer = null;
+function autoSave(){
+  showSyncDot('saving');
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(async ()=>{
+    const ok = await saveSD();
+    showSyncDot(ok?'ok':'err');
+  }, 1500);
+}
+
+function showSyncDot(state){
+  const dot = document.getElementById('sync-dot');
+  if(!dot) return;
+  dot.className = 'sync-dot ' + state;
+  if(state==='ok'||state==='err') setTimeout(()=>{ dot.className='sync-dot'; }, 2000);
+}
+
+
+function fmtDateWithDay(dateInput) {
+  const d = typeof dateInput === 'string' ? new Date(dateInput+'T00:00:00') : new Date(dateInput);
+  const main = d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const day = d.toLocaleDateString('en-IN',{weekday:'short'});
+  return `${main} (${day})`;
+}
+
+
+// ═══════════════════════════════════════════════════
+// CLOCK & INIT
+// ═══════════════════════════════════════════════════
+function tickClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent = n.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+  document.getElementById('topdate').textContent = fmtDateWithDay(n);
+}
+setInterval(tickClock,1000); tickClock();
+
+
+window.onload = async () => {
+  if (!window.__d11cAuthed) return; // not signed in — requireAuth() is already redirecting to login.html
+  applyTheme();
+  showLoadingScreen();
+  document.getElementById('sb-daily').classList.toggle('on', true);
+  document.getElementById('sb-cumul').classList.toggle('on', false);
+  await loadResources();   // machinery master list from Firestore
+  await loadSD();          // current date/shift's report from Firestore
+  await loadAttendanceData(); // current date/shift's attendance, from mark-attendance.html (via manpower.html)
+  buildTabs();
+  updateBanner();
+  await renderDateLog();
+  renderTab('allocation');
+  hideLoadingScreen();
+};
+
+// Manual "Refresh from Cloud" — re-pulls resources + the currently open
+// report + the sidebar report log from Firestore.
+async function manualRefresh(){
+  showLoadingScreen();
+  try{
+    await loadResources();
+    await loadSD();
+    await loadAttendanceData();
+    updateBanner();
+    buildTabs();
+    await renderDateLog();
+    renderTab(state.currentTab);
+    showToast('Refreshed from cloud ✓','ok');
+  }catch(e){
+    showToast('Refresh failed: '+e.message,'err');
+  }
+  hideLoadingScreen();
+  closeSB();
+}
+
+// ═══════════════════════════════════════════════════
+// TABS / NAVIGATION
+// (each daily-report tab is now its own page; the tab strip
+// links between them instead of switching in-page)
+// ═══════════════════════════════════════════════════
+function buildTabs() {
+  const tw = document.getElementById('tabs-wrap');
+  tw.innerHTML = '';
+  TAB_ORDER.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'tab-btn' + (t===state.currentTab?' active':'') + (SD.tabSaved?.[t]?' saved-tab':'');
+    b.textContent = TAB_LABELS[t] || t;
+    b.onclick = () => goTab(PAGE_URLS[t]);
+    tw.appendChild(b);
+  });
+}
+// Flushes any in-progress edits to Firestore before leaving this page,
+// so switching tabs never loses an unsaved keystroke (a real page
+// navigation does not keep anything in memory only).
+async function goTab(url) {
+  await saveSD();
+  location.href = url;
+}
+function renderTab(name) {
+  const c = document.getElementById('tab-content');
+  c.innerHTML = '';
+  renderAllocation(c);
+}
+
+function toggleSB() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sbo').classList.toggle('on'); }
+function closeSB() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbo').classList.remove('on'); }
+
+function setReport(r) {
+  if (r === 'cumul') location.href = 'cumulative.html';
+  else location.href = 'overview.html';
+}
+function goResources() {
+  location.href = 'resources.html';
+}
+
+// ═══════════════════════════════════════════════════
+// SIDEBAR / THEME
+// ═══════════════════════════════════════════════════
+function applyTheme() {
+  document.body.classList.toggle('light-theme', isLightTheme);
+  const tg = document.getElementById('theme-toggle');
+  if(tg) tg.checked = isLightTheme;
+  const lbl = document.getElementById('theme-toggle-lbl');
+  if(lbl) lbl.textContent = isLightTheme ? 'Light theme enabled' : 'Dark theme enabled';
+}
+function onThemeToggle() {
+  isLightTheme = document.getElementById('theme-toggle').checked;
+  ss('theme_mode', isLightTheme ? 'light' : 'dark');
+  applyTheme();
+}
+
+
+// ═══════════════════════════════════════════════════
+// DATE LOG (sidebar)
+// ═══════════════════════════════════════════════════
+async function renderDateLog() {
+  const el = document.getElementById('date-log');
+  if(!el) return;
+  el.innerHTML = '<div style="padding:10px 16px;font-size:12px;color:var(--muted2)">Loading…</div>';
+
+  // scan last 30 days
+  const days = [];
+  for(let i=0;i<30;i++) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    days.push(d.toISOString().split('T')[0]);
+  }
+  const cutoff = days[days.length-1];
+
+  // {date: {1:{tabSaved,finalSubmitted}, 2:..., 3:...}}
+  const byDate = {};
+  try{
+    const q = window.fb.query(fbCol('shiftReports'), window.fb.where('date','>=',cutoff));
+    const snap = await window.fb.getDocs(q);
+    snap.forEach(d => {
+      const data = d.data();
+      if(!data.date) return;
+      byDate[data.date] = byDate[data.date] || {};
+      byDate[data.date][data.shift] = {
+        tabSaved: data.tabSaved || {},
+        finalSubmitted: !!data.finalSubmitted
+      };
+    });
+  }catch(e){
+    console.warn('Failed to load report log from Firestore', e);
+  }
+
+  let html = '';
+  days.forEach(date => {
+    const shifts = [1,2,3];
+    let hasAny = false;
+    let shiftHtml = '';
+    shifts.forEach(s => {
+      const entry = byDate[date] && byDate[date][s];
+      let cls = 'ls-empty', lbl = SHIFT_NAMES[s].replace(' Shift','');
+      if(entry){
+        const anyTabSaved = SAVE_TABS.some(t=>entry.tabSaved?.[t]);
+        const allTabsSaved = SAVE_TABS.every(t=>entry.tabSaved?.[t]);
+        if(anyTabSaved) hasAny = true;
+        if(anyTabSaved && entry.finalSubmitted && allTabsSaved) cls = 'ls-saved';       // 🟢 all tabs + Final Submit done
+        else if(anyTabSaved) cls = 'ls-partial';                                        // 🟡 some tabs saved, not finalized
+        // else: no tab saved yet → stays 'ls-empty' (⚪), even if the doc exists
+      }
+      shiftHtml += `<span class="log-shift ${cls}" onclick="loadDateShift('${date}',${s})">${lbl}</span>`;
+    });
+    if(hasAny || date===today()) {
+      const df = new Date(date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+      html += `<div class="log-item"><div class="log-date">${df}</div><div class="log-shifts">${shiftHtml}</div></div>`;
+    }
+  });
+  el.innerHTML = html || '<div style="padding:10px 16px;font-size:12px;color:var(--muted2)">No saved reports yet</div>';
+}
+async function loadDateShift(date, shift) {
+  ss('shift_date',date); ss('shift_num',shift);
+  closeSB();
+  location.reload();
+}
+
+
+// ═══════════════════════════════════════════════════
+// BANNER
+// ═══════════════════════════════════════════════════
+function updateBanner() {
+  const d = getShiftDate();
+  const s = getShiftNum();
+  const df = fmtDateWithDay(d);
+  document.getElementById('bn-date').textContent = df;
+  const bs = document.getElementById('bn-shift');
+  bs.textContent = SHIFT_NAMES[s];
+  bs.className = `sb-val sshift-badge ss${s}`;
+  document.getElementById('bn-ic').textContent = SD.ic || '—';
+}
+
+
+// ═══════════════════════════════════════════════════
+// EDIT BAR
+// ═══════════════════════════════════════════════════
+function editBar(tab, c) {
+  if(!SD.tabSaved?.[tab]) return;
+  const div = mkEl('div','edit-bar');
+  const isEdit = state.editMode[tab];
+  div.innerHTML = `<span>${isEdit?'Editing — save when done':'Report saved for this tab'}</span>
+    <button class="btn ${isEdit?'btn-green':'btn-ghost'} btn-sm" onclick="toggleEdit('${tab}')">${isEdit?'✓ Done':'✏️ Edit'}</button>`;
+  c.appendChild(div);
+}
+function toggleEdit(tab) { state.editMode[tab] = !state.editMode[tab]; renderTab(tab); }
+function isEditable(tab) { return !SD.tabSaved?.[tab] || !!state.editMode[tab]; }
+
+
+// ═══════════════════════════════════════════════════
+// ALLOCATION
+// ═══════════════════════════════════════════════════
+function renderAllocation(c) {
+  editBar('allocation',c);
+  const esc = window.fb.esc;
+  const editable = isEditable('allocation');
+  const mpSaved = manpowerSaved();
+  const groups = machineryGroups();
+
+  // Page heading
+  const headCard = mkEl('div','card');
+  headCard.innerHTML = `<div class="card-title">🛠️ Machinery Allocation</div>
+    <p style="color:var(--muted);font-size:12px;margin:0">Assign machinery, operators and helpers for the current shift.</p>`;
+  c.appendChild(headCard);
+
+  if(!mpSaved) {
+    const warnCard = mkEl('div','card');
+    warnCard.innerHTML = `<div style="color:var(--red);font-size:12px">⚠ Operator and Helper selection is unavailable until Manpower has been saved for this date &amp; shift.</div>`;
+    c.appendChild(warnCard);
+  }
+
+  // Search + Group filter
+  const filterCard = mkEl('div','card');
+  const chipsHtml = ['all', ...groups].map(g => {
+    const label = g === 'all' ? 'All Groups' : (g === 'ROCK BREAKER' ? 'Rock Breaker' : g);
+    return `<button class="sf-btn ${allocGroupFilter===g?'on':''}" onclick="setAllocGroupFilter('${esc(g).replace(/'/g,"\\'")}')">${esc(label)}</button>`;
+  }).join('');
+  filterCard.innerHTML = `<div class="fg" style="margin-bottom:8px">
+      <label>Search</label>
+      <div style="position: relative;">
+        <input type="text" id="alloc-search" placeholder="Search by machinery, operator or helper..." value="${esc(allocSearchQuery)}" oninput="onAllocSearch(this.value)" style="padding-right: 32px;">
+        <button id="alloc-search-clear" onclick="clearAllocSearch()" style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 4px 8px; display: ${allocSearchQuery ? 'block' : 'none'};">&times;</button>
+      </div>
+    </div>
+    <div class="sf">${chipsHtml}</div>`;
+
+  c.appendChild(filterCard);
+
+  // Allocation table
+  const tblCard = mkEl('div','card');
+  tblCard.innerHTML = `<div class="card-title">📋 Allocations<span class="ct-right" style="color:var(--muted)">${(SD.allocationRows||[]).length} row(s)</span></div>
+    <div class="tw"><table>
+      <thead><tr><th>Group</th><th style="width: 80px; min-width: 60px; max-width: 80px;">Machinery</th><th>Operator</th><th>Helper</th><th></th></tr></thead>
+      <tbody id="alloc-tbody"></tbody>
+    </table></div>`;
+
+  if(editable) {
+    const ab = mkEl('button','btn btn-ghost btn-sm'); ab.style.marginTop='7px'; ab.textContent='+ Add Row';
+    ab.onclick = addAllocRow; tblCard.appendChild(ab);
+  }
+  c.appendChild(tblCard);
+  renderAllocRows();
+
+  const dupCard = mkEl('div'); dupCard.id='alloc-val'; dupCard.style.cssText='font-size:12px;margin-top:-4px;margin-bottom:11px';
+  c.appendChild(dupCard);
+  validateAllocation();
+
+  const sb = mkEl('div','save-bar');
+  sb.innerHTML = `<button class="btn btn-primary" id="save-allocation-btn" onclick="saveTab('allocation')">💾 Save Allocation</button>`;
+  c.appendChild(sb);
+}
+
+function setAllocGroupFilter(g){ allocGroupFilter = g; renderTab('allocation'); }
+function onAllocSearch(v){
+  allocSearchQuery = v;
+  const clearBtn = document.getElementById('alloc-search-clear');
+  if (clearBtn) clearBtn.style.display = v ? 'block' : 'none';
+  renderAllocRows();
+  validateAllocation();
+}
+function clearAllocSearch() {
+  const input = document.getElementById('alloc-search');
+  if (input) {
+    input.value = '';
+    onAllocSearch(''); // Passes an empty string to reset the search state and re-render rows
+  }
+}
+
+
+// Rows matching the current search text + group chip filter, keeping each
+// row's true index into SD.allocationRows (needed for update/delete calls).
+function filteredAllocRows(){
+  const q = allocSearchQuery.trim().toLowerCase();
+  return (SD.allocationRows||[]).map((row,i)=>({row,i})).filter(({row}) => {
+    if(allocGroupFilter!=='all' && String(row.group||'')!==allocGroupFilter) return false;
+    if(!q) return true;
+    const hay = [row.group, machineryDisplayName(row.machinery), row.operator, row.helper].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+function renderAllocRows(){
+  const tbody = document.getElementById('alloc-tbody');
+  if(!tbody) return;
+  const esc = window.fb.esc;
+  const editable = isEditable('allocation');
+  const mpSaved = manpowerSaved();
+  const groups = machineryGroups();
+  const entries = filteredAllocRows();
+
+  if(!entries.length) {
+    const msg = (SD.allocationRows||[]).length ? 'No allocations match your search/filter' : 'No allocations added yet';
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--muted)">${msg}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = entries.map(({row,i}) => {
+    const group = row.group || '';
+    const machinesInGroup = group ? activeMachinery().filter(m=>String(m.group||'')===group) : [];
+    const ops = group ? operatorsForGroup(group) : [];
+    const helpers = group ? helpersForGroup(group) : [];
+    return `<tr>
+      <td><select style="width: 100%; min-width: 110px;" onchange="updAllocRow(${i},'group',this.value)" ${editable?'':'disabled'}>
+        <option value="" ${!group?'selected':''} disabled>Select Group</option>
+        ${groups.map(g=>`<option value="${esc(g)}" ${group===g?'selected':''}>${esc(g)}</option>`).join('')}
+      </select></td>
+      <td><select style="width: 100%; min-width: 60px; max-width: 80px;" onchange="updAllocRow(${i},'machinery',this.value)" ${(editable&&group)?'':'disabled'}>
+        <option value="" ${!row.machinery?'selected':''} disabled>${group?'Select Machinery':'Select Group first'}</option>
+        ${machinesInGroup.map(m=>`<option value="${esc(m.id)}" ${row.machinery===m.id?'selected':''}>${esc(machineryOptionLabel(m))}</option>`).join('')}
+      </select></td>
+      <td><select style="width: 100%; min-width: 170px;" onchange="updAllocRow(${i},'operator',this.value)" ${(editable&&group&&mpSaved)?'':'disabled'}>
+        <option value="">--</option>
+        ${ops.map(o=>`<option value="${esc(o.name)}" ${row.operator===o.name?'selected':''}>${esc(o.name)}</option>`).join('')}
+      </select></td>
+      <td><select style="width: 100%; min-width: 170px;" onchange="updAllocRow(${i},'helper',this.value)" ${(editable&&group&&mpSaved)?'':'disabled'}>
+        <option value="">--</option>
+        ${helpers.map(h=>`<option value="${esc(h.name)}" ${row.helper===h.name?'selected':''}>${esc(h.name)}</option>`).join('')}
+      </select></td>
+      <td>${editable?`<button class="btn btn-red btn-xs" onclick="delAllocRow(${i})">✕</button>`:''}</td>
+    </tr>`;
+
+  }).join('');
+}
+
+function addAllocRow(){
+  SD.allocationRows = SD.allocationRows || [];
+  // When a specific Group chip is active, the new row inherits that group
+  // (and stays visible under the active filter) instead of starting blank.
+  // With "All Groups" selected, the Group is left for the user to pick.
+  const presetGroup = allocGroupFilter!=='all' ? allocGroupFilter : '';
+  SD.allocationRows.push({group:presetGroup,machinery:'',operator:'',helper:''});
+  autoSave();
+  renderTab('allocation');
+}
+function delAllocRow(i){
+  SD.allocationRows.splice(i,1);
+  autoSave();
+  renderTab('allocation');
+}
+function updAllocRow(i,k,v){
+  SD.allocationRows = SD.allocationRows || [];
+  SD.allocationRows[i] = SD.allocationRows[i] || {group:'',machinery:'',operator:'',helper:''};
+  // Changing the Group invalidates whatever Machinery/Operator/Helper were
+  // previously chosen for this row (they belonged to the old group's lists).
+  if(k==='group' && SD.allocationRows[i].group!==v){
+    SD.allocationRows[i].machinery=''; SD.allocationRows[i].operator=''; SD.allocationRows[i].helper='';
+  }
+  SD.allocationRows[i][k]=v;
+  autoSave();
+  // Group/Machinery changes affect which dropdown options other cells in
+  // this row show, so re-render the row list; other single-field edits
+  // (Operator/Helper) don't need a full re-render.
+  if(k==='group' || k==='machinery'){
+    renderAllocRows();
+  }
+  validateAllocation();
+}
+
+// Validation: every row needs a Group + Machinery selected. The same
+// machinery, operator, or helper is allowed to repeat across rows (e.g.
+// one shovel split across two operators/locations in the same shift), so
+// duplicates are never flagged here.
+function validateAllocation(){
+  const el = document.getElementById('alloc-val');
+  if(!el) return true;
+  const rows = SD.allocationRows||[];
+  const incomplete = rows.filter(r=>!r.group || !r.machinery).length;
+  el.innerHTML = incomplete ? `<span style="color:var(--red)">⚠ ${incomplete} row(s) missing Group or Machinery</span>` : '';
+  return !incomplete;
+}
+
+
+// ═══════════════════════════════════════════════════
+// SAVE LOGIC
+// ═══════════════════════════════════════════════════
+async function saveTab(tab){
+  if(tab==='allocation' && !validateAllocation()){
+    showToast('Fix the highlighted allocation issues before saving','err');
+    return;
+  }
+  SD.tabSaved=SD.tabSaved||{};
+  SD.tabSaved[tab]=true;
+  state.editMode[tab]=false;
+  const ok = await saveSD();
+  showToast(ok ? `${TAB_LABELS[tab]||tab} saved ✓` : `Save failed — check your connection`, ok?'ok':'err');
+  updateBanner();
+  buildTabs();
+  renderTab(tab);
+  await renderDateLog();
+}
+
+
+// ═══════════════════════════════════════════════════
+// LOADING OVERLAY
+// ═══════════════════════════════════════════════════
+function showLoadingScreen(){const ov=document.getElementById('loading-overlay');if(ov)ov.style.display='flex';}
+function hideLoadingScreen(){const ov=document.getElementById('loading-overlay');if(ov)ov.style.display='none';}
+
+
+// ═══════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════
+function mkEl(tag,cls,id){const el=document.createElement(tag);if(cls)el.className=cls;if(id)el.id=id;return el;}
+function showToast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} on`;setTimeout(()=>t.className='toast',3200);}
+
+</script>
+<!-- ─── VANTA BACKGROUND ─── -->
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.VANTA) {
+      window.VANTA.FOG({
+        el: "#vanta-bg",
+        mouseControls: true,
+        touchControls: true,
+        gyroControls: false,
+        minHeight: 200.00,
+        minWidth: 200.00,
+        highlightColor: 0x0d0f14,
+        midtoneColor: 0xffffff,
+        lowlightColor: 0x181e2a,
+        baseColor: 0x0d0f14,
+        blurFactor: 0.48,
+        speed: 0.20,
+        zoom: 0.15
+      });
+    }
+  });
+</script>
+</body>
+</html>
+
+</body>
+</html>

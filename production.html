@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Deposit 11C shift reporting — Production</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style1.css">
+<!-- Preload background engine scripts as early as possible so the animated
+     background is ready with no flash/delay once the page paints -->
+<link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js" as="script">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.fog.min.js" as="script">
+<!-- Loaded with "defer" so the browser starts fetching them immediately in parallel -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.fog.min.js"></script>
+
+<style>
+  /* Sidebar user badge (replaces the static "Mining Operations Tracker" tagline) */
+  .sb-user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .sb-user-row .user-badge-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sb-user-row .admin-tag {
+    font-size: 9px;
+    font-weight: 700;
+    color: #000;
+    background: var(--accent);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 4px;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+  }
+  .sb-user-row .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    padding: 3px 10px;
+    border-radius: var(--r);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: all 0.18s;
+    flex-shrink: 0;
+  }
+  .sb-user-row .btn-outline:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+<div id="vanta-bg"></div>
+
+<div class="sbo" id="sbo" onclick="closeSB()"></div>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="sb-head">
+    <h2>🌱Deposit 11C🌱</h2>
+    <div class="sb-user-row" id="sidebarUserBadge"></div>
+  </div>
+  <div class="sb-fixed">
+    <div class="sb-section">Reports</div>
+    <div class="sb-tile" id="sb-daily" onclick="setReport('daily')"><span class="icon">📋</span>Daily Report</div>
+    <div class="sb-tile" id="sb-cumul" onclick="setReport('cumul')"><span class="icon">📊</span>Cumulative Report</div>
+    <div class="sb-tile" onclick="location.href='shift-report.html'"><span class="icon">🧾</span>Shift Report Generator</div>
+    <div class="sb-tile" onclick="location.href='allocation-register.html'"><span class="icon">📑</span>Allocation Register</div>
+    <div class="sb-section">Master Data</div>
+    <div class="sb-tile" onclick="goResources()"><span class="icon">📁</span>Resources (Master List)</div>
+
+    <!-- SHIFT TOGGLE -->
+    <div class="sb-section">View</div>
+    <div class="toggle-row">
+      <div><div class="toggle-lbl">Light / Dark</div><div class="toggle-sub" id="theme-toggle-lbl">Dark theme enabled</div></div>
+      <label class="ts"><input type="checkbox" id="theme-toggle" onchange="onThemeToggle()"><span class="ts-slider"></span></label>
+    </div>
+  </div>
+
+  <!-- DATE LOG — the only part of the sidebar that scrolls -->
+  <div class="sb-log-wrap">
+    <div class="sb-section">Report Log</div>
+    <div class="sb-scroll" id="date-log"></div>
+  </div>
+
+  <div class="sb-foot">
+    <div class="sb-credit">Designed and managed by Vikrant Vishal 😎</div>
+  </div>
+</div>
+
+<!-- APP HEADER (unified with main-menu.html / Attendance Portal) -->
+<header class="app-header">
+  <div class="header-top">
+    <div class="titles">
+      <button class="menu-btn" onclick="toggleSB()" aria-label="Open menu">☰</button>
+      <div class="logo-icon">📝</div>
+      <div>
+        <h1>DEPOSIT 11C</h1>
+        <div class="sub">Mining Operations</div>
+      </div>
+    </div>
+    <div class="home-date-group">
+      <a class="home-btn" href="index.html" title="Home" aria-label="Back to Home">🏠</a>
+      <!-- Moved datetime-chip here -->
+      <div class="datetime-chip">
+        <div class="time" id="clock">--:--</div>
+        <div id="topdate">--</div>
+      </div>
+    </div>
+  </div>
+  <div class="header-bottom">
+    <!-- <div id="sync-dot" class="sync-dot"></div> -->
+  </div>
+</header>
+
+<!-- SHIFT BANNER -->
+<div id="shift-banner">
+  <div class="sb-item"><span class="sb-label">Date</span>&nbsp;<span class="sb-val" id="bn-date">—</span></div>
+  <span class="sb-sep">·</span>
+  <div class="sb-item"><span id="bn-shift" class="sb-val sshift-badge ss1">—</span></div>
+  <span class="sb-sep">·</span>
+  <div class="sb-item"><span class="sb-label">I/C</span>&nbsp;<span class="sb-val" id="bn-ic">—</span></div>
+</div>
+
+<!-- APP BODY -->
+<div id="app-body">
+  <div class="tabs-wrap" id="tabs-wrap"></div>
+  <div id="tab-content"></div>
+
+<div class="toast" id="toast"></div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" style="display:none;position:fixed;inset:0;background:rgba(10,14,20,0.92);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;color:#f5a623;letter-spacing:1px">🌱Deposit 11C🌱</div>
+  <div style="font-size:13px;color:#6a8099">Loading data...</div>
+  <div style="width:48px;height:48px;border:3px solid #243040;border-top-color:#f5a623;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</div>
+
+<!-- FIREBASE (Firestore) — shared config with the Deposit-11C Attendance System -->
+<script type="module">
+  import {
+    db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp,
+    attendanceDocId, esc
+  } from "./firebase-config.js";
+  import { requireAuth, renderUserBadge } from "./auth.js";
+  // Same login/session system used by Attendance Management. If nobody is
+  // signed in this redirects to login.html?redirect=production.html(+query),
+  // preserving ?auto=1 so the user lands back on the exact page after login.
+  window.__d11cAuthed = !!requireAuth();
+  // Populate the sidebar with the signed-in user's name + a Logout button.
+  // renderUserBadge() is the exact same function main-menu.html uses, so the
+  // displayed name (from the active session) and the Logout behaviour
+  // (session clear + redirect to login.html) are identical to the rest of
+  // the portal — nothing here is hard-coded.
+  if (window.__d11cAuthed) {
+    renderUserBadge('sidebarUserBadge');
+    // Prefix the sidebar's user name with 👤 without touching auth.js's
+    // shared renderUserBadge() (used unchanged on other pages).
+    const sbNameEl = document.querySelector('#sidebarUserBadge .user-badge-name');
+    if (sbNameEl) sbNameEl.prepend('👤 ');
+  }
+  window.fb = { db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp, attendanceDocId, esc };
+  window.esc = esc;
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════
+const SHIFT_NAMES = {1:'First Shift',2:'Second Shift',3:'Night Shift'};
+const MP_ROLES = ['Executive','Shovel Operator','Dumper Operator','Drill Operator','Dozer Operator','Driver','Field Attendant','Trainee','Other'];
+const MACH_CATS = ['Shovel','Dumper','Drill','Water Sprinkler','Dozer','Light Vehicle','Other'];
+const STRATA = ['Very Hard','Hard','Medium','Soft'];
+// Preset options for the Shovel-Dumper Trip "Location" field;
+// "Enter Manually" reveals a free-text input for a custom location
+// (same pattern as machinery.html's "Status @ End" field).
+const LOCATION_OPTIONS = ['DSP','982N','982S','994N','994S','1006N','1006S','1018N','1018S','1030N','1030S','1042N','1042S','1054N','1054S','1066N','1066S','1078N','1078S','1090N','1090S','1102N','1102S','1114N','1114S','1126N','1126S','1138N','1138S','1150N','1150S','1162N','1162S','1174N','1174S','WASTE DUMP'];
+const SAVE_TABS = ['manpower','production','drilling','machinery','allocation','remarks'];
+// Tab order: Overview, Manpower, Allocation, Production, Drilling, Machinery, Remarks
+const TAB_ORDER = ['overview','manpower','allocation','production','drilling','machinery','remarks'];
+const TAB_LABELS = {overview:'Overview',manpower:'Manpower',allocation:'Allocation',production:'Production',drilling:'Drilling',machinery:'Machinery',remarks:'Remarks'};
+// Maps each daily-report tab to the standalone page that now holds it
+// (this app used to be a single-page tool with in-page tab switching;
+// each tab now lives in its own HTML file, linked here).
+const PAGE_URLS = {overview:'overview.html',manpower:'manpower.html',allocation:'allocation.html',production:'production.html',drilling:'drilling.html',machinery:'machinery.html',remarks:'remarks.html'};
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let state = { report:'daily', currentTab:'production', editMode:{}, photos:[], machPhotos:{} };
+let mpFilter = 'all';
+let machCatFilter = 'all';
+let isLightTheme = false;
+
+// ═══════════════════════════════════════════════════
+// STORAGE HELPERS (local — UI preferences only, e.g. theme
+// and which date/shift is currently open. All report data
+// and master lists live in Firestore, never in localStorage.)
+// ═══════════════════════════════════════════════════
+const ls = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e) { return null; } };
+const ss = (k,v) => localStorage.setItem(k, JSON.stringify(v));
+isLightTheme = ls('theme_mode') === 'light';
+
+// ═══════════════════════════════════════════════════
+// FIREBASE (Firestore) DATA LAYER
+// Same Firebase project/config as the Deposit-11C Attendance
+// System (see firebase-config.js). Collections used here:
+//   shiftReports/{date}_shift{n}  — one doc per date+shift, holds the full shift report
+//   machinery/{machineryId}       — machinery master list; the Machinery ID is the doc ID (permanent unique identifier)
+// (Manpower is no longer a master list here — see mark-attendance.html → manpower.html)
+// ═══════════════════════════════════════════════════
+function fbCol(name){ return window.fb.collection(window.fb.db, name); }
+function fbDocRef(name,id){ return window.fb.doc(window.fb.db, name, String(id)); }
+
+
+// ═══════════════════════════════════════════════════
+// RESOURCES (Machinery master list — Firestore)
+// Manpower is no longer sourced from a master list here — Operator
+// and Helper selection now come from the attendance data saved via
+// manpower.html (see the ATTENDANCE section below).
+// Machinery is no longer hand-edited or seeded from bundled defaults
+// — it comes entirely from the Excel import on resources.html, which
+// is the single source of truth for the "machinery" collection
+// (fields: group, name, status).
+// ═══════════════════════════════════════════════════
+let resources = { machinery:[] };
+
+async function loadResources(){
+  try{
+    const machSnap = await window.fb.getDocs(fbCol('machinery'));
+    let machinery = []; machSnap.forEach(d=>machinery.push({ id: d.id, ...d.data() }));
+    resources = { machinery };
+  }catch(e){
+    console.warn('Failed to load machinery master list from Firestore', e);
+    resources = { machinery: [] };
+  }
+}
+
+// Machinery imported as Inactive is kept in the master list (for
+// historical shift-report records) but hidden from selection here.
+function activeMachinery(){ return resources.machinery.filter(m=>m.status!=='Inactive'); }
+function machineryOptionLabel(m){ return m.name || m.id; }
+function machineryDisplayName(id){
+  if(!id) return '—';
+  const machine=resources.machinery.find(m=>m.id===id);
+  return machine?.name || id;
+}
+
+
+// ═══════════════════════════════════════════════════
+// SHIFT DATA
+// ═══════════════════════════════════════════════════
+function today() { return new Date().toISOString().split('T')[0]; }
+function getShiftDate() { return ls('shift_date') || today(); }
+function getShiftNum() { return ls('shift_num') || 1; }
+function getCurrentKey() { return `${getShiftDate()}_shift${getShiftNum()}`; }
+
+// Maps this app's shift numbers (1/2/3) to the Attendance System's shift
+// keys ('first'/'second'/'night'), used to look up the "attendance"
+// collection written by mark-attendance.html.
+const SHIFT_KEY_BY_NUM = { 1: 'first', 2: 'second', 3: 'night' };
+
+function defaultSD() {
+  return {
+    date:getShiftDate(), shift:getShiftNum(), ic:'', saved:false,
+    tabSaved:{}, // which tabs have been saved
+    attendance:{}, attendanceRemarks:{},
+    otPersonnel:[], othersPersonnel:[],
+    production:{rom:'',waste:'',sp:'',firstHour:'',firstHourRemarks:'',lastHour:'',lastHourRemarks:'',affectedBy:[''],plantStoppage:[{reason:'',hours:'',minutes:''}]},
+    shovelRows:[], dumperRows:[],
+    drillRows:[], drillSummary:{totalM:0,totalH:0},
+    allocationRows:[],
+    machinery:{},
+    remarksWork:'', remarksOther:'',
+    photos:[], machPhotos:{}
+  };
+}
+
+
+let SD = {};
+
+async function loadSD() {
+  const id = getCurrentKey();
+  try{
+    const snap = await window.fb.getDoc(fbDocRef('shiftReports', id));
+    SD = snap.exists() ? snap.data() : defaultSD();
+  }catch(e){
+    console.warn('Failed to load shift report from Firestore', e);
+    SD = defaultSD();
+  }
+  state.photos = SD.photos || [];
+  state.machPhotos = SD.machPhotos || {};
+}
+async function saveSD() {
+  SD.photos = state.photos;
+  SD.machPhotos = state.machPhotos;
+  SD.saved = true;
+  try{
+    await window.fb.setDoc(fbDocRef('shiftReports', getCurrentKey()), SD);
+    return true;
+  }catch(e){
+    console.warn('Failed to save shift report to Firestore', e);
+    return false;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════
+// ATTENDANCE (read from the "attendance" collection —
+// the same records mark-attendance.html submits, and the
+// same source manpower.html reads. Operator dropdowns below
+// are populated from this instead of a separate employee
+// master list.)
+// ═══════════════════════════════════════════════════
+let attendanceDoc = null; // { date, shift, entries:{empId:{status,name,group,...}}, otEntries:{...}, ... } or null if not yet submitted
+
+async function loadAttendanceData() {
+  const shiftKey = SHIFT_KEY_BY_NUM[getShiftNum()] || 'first';
+  const id = window.fb.attendanceDocId(getShiftDate(), shiftKey);
+  try {
+    const snap = await window.fb.getDoc(window.fb.doc(window.fb.db, 'attendance', id));
+    attendanceDoc = snap.exists() ? snap.data() : null;
+  } catch (e) {
+    console.warn('Failed to load attendance data from Firestore', e);
+    attendanceDoc = null;
+  }
+}
+
+// Employees marked Present (normal duty or OT) for the given group in the
+// loaded attendance record. Used to populate operator dropdowns instead of
+// a separate employee master list. Returns [] until manpower.html has been
+// saved for this date & shift (see manpowerSaved() below).
+function presentByGroup(groupName) {
+  if (!attendanceDoc) return [];
+  const target = String(groupName || '').trim().toUpperCase();
+  const list = [];
+  Object.entries(attendanceDoc.entries || {}).forEach(([id, e]) => {
+    const isGroup = String(e.group || '').trim().toUpperCase() === target;
+    const isPresent = e.status === 'Present' || e.status === 'Present (Mutual)';
+    if (isGroup && isPresent) list.push({ id, name: e.name });
+  });
+  Object.entries(attendanceDoc.otEntries || {}).forEach(([id, e]) => {
+    const isGroup = String(e.group || '').trim().toUpperCase() === target;
+    if (isGroup) list.push({ id, name: e.name });
+  });
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  return list;
+}
+
+// All employees marked Present (normal duty or OT) in the loaded attendance
+// record, across every group — used for the Helper dropdown (which, unlike
+// Operator, isn't restricted to a single group). Same manpower-saved gating
+// as presentByGroup().
+function presentAll() {
+  if (!attendanceDoc) return [];
+  const list = [];
+  Object.entries(attendanceDoc.entries || {}).forEach(([id, e]) => {
+    const isPresent = e.status === 'Present' || e.status === 'Present (Mutual)';
+    if (isPresent) list.push({ id, name: e.name });
+  });
+  Object.entries(attendanceDoc.otEntries || {}).forEach(([id, e]) => {
+    list.push({ id, name: e.name });
+  });
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  return list;
+}
+
+// The operator dropdowns stay unavailable until manpower.html has been
+// saved for the currently selected date & shift.
+function manpowerSaved() { return !!SD.tabSaved?.manpower; }
+
+// Looks up the Machinery Allocation entry (saved via allocation.html, in
+// the same shift-report doc as SD.allocationRows) for a given machinery
+// ID — used to default Operator/Helper on Shovel/Dumper selection here.
+// If more than one allocation row exists for the same machinery, the
+// first one with an Operator/Helper set wins.
+function allocationForMachinery(machineryId) {
+  if (!machineryId) return null;
+  const rows = SD.allocationRows || [];
+  return rows.find(r => r && r.machinery === machineryId && (r.operator || r.helper)) || null;
+}
+
+// Debounced auto-save to Firestore (Firestore's own offline persistence,
+// enabled in firebase-config.js, keeps this instant and safe even offline).
+let _autoSaveTimer = null;
+function autoSave(){
+  showSyncDot('saving');
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(async ()=>{
+    const ok = await saveSD();
+    showSyncDot(ok?'ok':'err');
+  }, 1500);
+}
+
+function showSyncDot(state){
+  const dot = document.getElementById('sync-dot');
+  if(!dot) return;
+  dot.className = 'sync-dot ' + state;
+  if(state==='ok'||state==='err') setTimeout(()=>{ dot.className='sync-dot'; }, 2000);
+}
+
+
+function fmtDateWithDay(dateInput) {
+  const d = typeof dateInput === 'string' ? new Date(dateInput+'T00:00:00') : new Date(dateInput);
+  const main = d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const day = d.toLocaleDateString('en-IN',{weekday:'short'});
+  return `${main} (${day})`;
+}
+
+
+// ═══════════════════════════════════════════════════
+// CLOCK & INIT
+// ═══════════════════════════════════════════════════
+function tickClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent = n.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+  document.getElementById('topdate').textContent = fmtDateWithDay(n);
+}
+setInterval(tickClock,1000); tickClock();
+
+
+window.onload = async () => {
+  if (!window.__d11cAuthed) return; // not signed in — requireAuth() is already redirecting to login.html
+  applyTheme();
+  showLoadingScreen();
+  document.getElementById('sb-daily').classList.toggle('on', true);
+  document.getElementById('sb-cumul').classList.toggle('on', false);
+  await loadResources();   // machinery master list from Firestore
+  await loadSD();          // current date/shift's report from Firestore
+  await loadAttendanceData(); // current date/shift's attendance, from mark-attendance.html (via manpower.html)
+  buildTabs();
+  updateBanner();
+  await renderDateLog();
+  renderTab('production');
+  hideLoadingScreen();
+};
+
+// Manual "Refresh from Cloud" — re-pulls resources + the currently open
+// report + the sidebar report log from Firestore.
+async function manualRefresh(){
+  showLoadingScreen();
+  try{
+    await loadResources();
+    await loadSD();
+    await loadAttendanceData();
+    updateBanner();
+    buildTabs();
+    await renderDateLog();
+    renderTab(state.currentTab);
+    showToast('Refreshed from cloud ✓','ok');
+  }catch(e){
+    showToast('Refresh failed: '+e.message,'err');
+  }
+  hideLoadingScreen();
+  closeSB();
+}
+
+// ═══════════════════════════════════════════════════
+// TABS / NAVIGATION
+// (each daily-report tab is now its own page; the tab strip
+// links between them instead of switching in-page)
+// ═══════════════════════════════════════════════════
+function buildTabs() {
+  const tw = document.getElementById('tabs-wrap');
+  tw.innerHTML = '';
+  TAB_ORDER.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'tab-btn' + (t===state.currentTab?' active':'') + (SD.tabSaved?.[t]?' saved-tab':'');
+    b.textContent = TAB_LABELS[t] || t;
+    b.onclick = () => goTab(PAGE_URLS[t]);
+    tw.appendChild(b);
+  });
+}
+// Flushes any in-progress edits to Firestore before leaving this page,
+// so switching tabs never loses an unsaved keystroke (the old in-page
+// tab switch kept everything in memory only; a real page navigation does not).
+async function goTab(url) {
+  collectCurrentTab();
+  await saveSD();
+  location.href = url;
+}
+function renderTab(name) {
+  const c = document.getElementById('tab-content');
+  c.innerHTML = '';
+  renderProduction(c);
+}
+
+function toggleSB() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sbo').classList.toggle('on'); }
+function closeSB() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbo').classList.remove('on'); }
+
+function setReport(r) {
+  if (r === 'cumul') location.href = 'cumulative.html';
+  else location.href = 'overview.html';
+}
+function goResources() {
+  location.href = 'resources.html';
+}
+
+// ═══════════════════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════════════════
+function applyTheme() {
+  document.body.classList.toggle('light-theme', isLightTheme);
+  const tg = document.getElementById('theme-toggle');
+  if(tg) tg.checked = isLightTheme;
+  const lbl = document.getElementById('theme-toggle-lbl');
+  if(lbl) lbl.textContent = isLightTheme ? 'Light theme enabled' : 'Dark theme enabled';
+}
+function onThemeToggle() {
+  isLightTheme = document.getElementById('theme-toggle').checked;
+  ss('theme_mode', isLightTheme ? 'light' : 'dark');
+  applyTheme();
+}
+
+
+// ═══════════════════════════════════════════════════
+// DATE LOG (sidebar)
+// ═══════════════════════════════════════════════════
+async function renderDateLog() {
+  const el = document.getElementById('date-log');
+  if(!el) return;
+  el.innerHTML = '<div style="padding:10px 16px;font-size:12px;color:var(--muted2)">Loading…</div>';
+
+  // scan last 30 days
+  const days = [];
+  for(let i=0;i<30;i++) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    days.push(d.toISOString().split('T')[0]);
+  }
+  const cutoff = days[days.length-1];
+
+  // {date: {1:{tabSaved,finalSubmitted}, 2:..., 3:...}}
+  const byDate = {};
+  try{
+    const q = window.fb.query(fbCol('shiftReports'), window.fb.where('date','>=',cutoff));
+    const snap = await window.fb.getDocs(q);
+    snap.forEach(d => {
+      const data = d.data();
+      if(!data.date) return;
+      byDate[data.date] = byDate[data.date] || {};
+      byDate[data.date][data.shift] = {
+        tabSaved: data.tabSaved || {},
+        finalSubmitted: !!data.finalSubmitted
+      };
+    });
+  }catch(e){
+    console.warn('Failed to load report log from Firestore', e);
+  }
+
+  let html = '';
+  days.forEach(date => {
+    const shifts = [1,2,3];
+    let hasAny = false;
+    let shiftHtml = '';
+    shifts.forEach(s => {
+      const entry = byDate[date] && byDate[date][s];
+      let cls = 'ls-empty', lbl = SHIFT_NAMES[s].replace(' Shift','');
+      if(entry){
+        const anyTabSaved = SAVE_TABS.some(t=>entry.tabSaved?.[t]);
+        const allTabsSaved = SAVE_TABS.every(t=>entry.tabSaved?.[t]);
+        if(anyTabSaved) hasAny = true;
+        if(anyTabSaved && entry.finalSubmitted && allTabsSaved) cls = 'ls-saved';       // 🟢 all tabs + Final Submit done
+        else if(anyTabSaved) cls = 'ls-partial';                                        // 🟡 some tabs saved, not finalized
+        // else: no tab saved yet → stays 'ls-empty' (⚪), even if the doc exists
+      }
+      shiftHtml += `<span class="log-shift ${cls}" onclick="loadDateShift('${date}',${s})">${lbl}</span>`;
+    });
+    if(hasAny || date===today()) {
+      const df = new Date(date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+      html += `<div class="log-item"><div class="log-date">${df}</div><div class="log-shifts">${shiftHtml}</div></div>`;
+    }
+  });
+  el.innerHTML = html || '<div style="padding:10px 16px;font-size:12px;color:var(--muted2)">No saved reports yet</div>';
+}
+async function loadDateShift(date, shift) {
+  ss('shift_date',date); ss('shift_num',shift);
+  closeSB();
+  location.reload();
+}
+
+
+// ═══════════════════════════════════════════════════
+// BANNER
+// ═══════════════════════════════════════════════════
+function updateBanner() {
+  const d = getShiftDate();
+  const s = getShiftNum();
+  const df = fmtDateWithDay(d);
+  document.getElementById('bn-date').textContent = df;
+  const bs = document.getElementById('bn-shift');
+  bs.textContent = SHIFT_NAMES[s];
+  bs.className = `sb-val sshift-badge ss${s}`;
+  document.getElementById('bn-ic').textContent = SD.ic || '—';
+}
+
+
+// ═══════════════════════════════════════════════════
+// EDIT BAR
+// ═══════════════════════════════════════════════════
+function editBar(tab, c) {
+  if(!SD.tabSaved?.[tab]) return;
+  const div = mkEl('div','edit-bar');
+  const isEdit = state.editMode[tab];
+  div.innerHTML = `<span>${isEdit?'Editing — save when done':'Report saved for this tab'}</span>
+    <button class="btn ${isEdit?'btn-green':'btn-ghost'} btn-sm" onclick="toggleEdit('${tab}')">${isEdit?'✓ Done':'✏️ Edit'}</button>`;
+  c.appendChild(div);
+}
+function toggleEdit(tab) { state.editMode[tab] = !state.editMode[tab]; renderTab(tab); }
+function isEditable(tab) { return !SD.tabSaved?.[tab] || !!state.editMode[tab]; }
+
+
+// ═══════════════════════════════════════════════════
+// COLLECT CURRENT TAB DATA (reads whichever of this tab's own
+// fields are present in the DOM into SD; harmless no-ops for
+// fields that live on a different page)
+// ═══════════════════════════════════════════════════
+function collectCurrentTab() {
+  const get = id => document.getElementById(id)?.value;
+  if(document.getElementById('sd-date')) {
+    const dv=get('sd-date'), sv=get('sd-shift'), iv=get('sd-ic');
+    if(dv){ss('shift_date',dv);SD.date=dv;}
+    if(sv){ss('shift_num',+sv);SD.shift=+sv;}
+    if(iv!==undefined){ss('shift_ic',iv);SD.ic=iv;}
+  }
+  const rw=get('rm-work'), ro=get('rm-other');
+  if(rw!==null&&rw!==undefined) SD.remarksWork=rw;
+  if(ro!==null&&ro!==undefined) SD.remarksOther=ro;
+  const prom=get('prod-rom');
+  if(prom!==null&&prom!==undefined) { SD.production=SD.production||{}; SD.production.rom=prom; }
+  const pfirst=get('prod-first-hour'), plast=get('prod-last-hour');
+  if(pfirst!==null&&pfirst!==undefined) { SD.production=SD.production||{}; SD.production.firstHour=pfirst; }
+  if(plast!==null&&plast!==undefined) { SD.production=SD.production||{}; SD.production.lastHour=plast; }
+  const pfirstR=get('prod-first-hour-remarks'), plastR=get('prod-last-hour-remarks');
+  if(pfirstR!==null&&pfirstR!==undefined) { SD.production=SD.production||{}; SD.production.firstHourRemarks=pfirstR; }
+  if(plastR!==null&&plastR!==undefined) { SD.production=SD.production||{}; SD.production.lastHourRemarks=plastR; }
+}
+
+
+// ═══════════════════════════════════════════════════
+// PRODUCTION
+// ═══════════════════════════════════════════════════
+function renderProduction(c) {
+  editBar('production',c);
+  const editable = isEditable('production');
+  const shovelMachines = activeMachinery().filter(m=>m.group==='Shovel');
+  const dumperMachines = activeMachinery().filter(m=>m.group==='Dumper');
+  const shovels = shovelMachines.map(m=>m.id);
+  const dumpers = dumperMachines.map(m=>m.id);
+  const mpSaved = manpowerSaved();
+  const shOps = mpSaved ? presentByGroup('SHOVEL').map(e=>e.name) : [];
+  const allMP = mpSaved ? presentAll().map(e=>e.name) : [];
+  const duOps = mpSaved ? presentByGroup('DUMPER').map(e=>e.name) : [];
+  (SD.shovelRows||[]).forEach(row => {
+    // Migrate legacy per-shovel trip totals (before per-dumper breakdown existed)
+    // into a single dumper row so previously-saved data isn't lost.
+    if(row && !Array.isArray(row.dumpers)) {
+      const legacyTot=(+row.romTrips||0)+(+row.wasteTrips||0)+(+row.spTrips||0);
+      row.dumpers = legacyTot>0 ? [{dumper:'',operator:'',rom:row.romTrips||0,waste:row.wasteTrips||0,sp:row.spTrips||0}] : [];
+    }
+  });
+
+  // Shovel–Dumper Trips
+  const shCard = mkEl('div','card');
+  shCard.innerHTML = '<div class="card-title">🚧 Shovel–Dumper Trips</div><div id="shovel-rows-wrap"></div>';
+  if(!mpSaved) {
+    const note = mkEl('div');
+    note.style.cssText = 'color:var(--red);font-size:12px;padding:4px 2px 0';
+    note.textContent = '⚠ Operator and Helper selection is unavailable until Manpower has been saved for this date & shift.';
+    shCard.appendChild(note);
+  }
+  if(editable) {
+    const ab=mkEl('button','btn btn-ghost btn-sm'); ab.style.marginTop='7px'; ab.style.color='var(--accent)'; ab.textContent='+ Add Shovel';
+    ab.onclick=()=>{SD.shovelRows.push({shovel:"",operator:"",helper:"",location:"",dumpers:[]});renderTab('production');}; shCard.appendChild(ab);
+  }
+  c.appendChild(shCard);
+
+  (SD.shovelRows||[]).forEach((row,i) => {
+    const el = mkEl('div','mach-card');
+    const sT = shovelTotals(i);
+    const dumperRowsHtml = (row.dumpers||[]).map((d,di)=>{
+      const dtot=(+d.rom||0)+(+d.waste||0)+(+d.sp||0);
+      return `<tr>
+        <td><select style="min-width:55px" onchange="updShDumper(${i},${di},'dumper',this.value)" ${editable?'':'disabled'}>
+          <option value="" ${!d.dumper?'selected':''} disabled>Select Dumper</option>
+          ${dumperMachines.map(dm=>`<option value="${esc(dm.id)}" ${d.dumper===dm.id?'selected':''}>${esc(machineryOptionLabel(dm))}</option>`).join('')}<option value="Other" ${d.dumper==='Other'?'selected':''}>Other</option>
+        </select></td>
+        <td><select id="sh-${i}-du-op-${di}" style="min-width:170px" onchange="updShDumper(${i},${di},'operator',this.value)" ${(editable&&mpSaved)?'':'disabled'}>
+          <option value="">--</option>${duOps.map(o=>`<option ${d.operator===o?'selected':''}>${o}</option>`).join('')}
+        </select></td>
+        <td><input type="number" value="${d.rom||''}" placeholder="0" style="width:30px" oninput="updShDumperTrip(${i},${di},'rom',this.value)" ${editable?'':'readonly'}></td>
+        <td><input type="number" value="${d.waste||''}" placeholder="0" style="width:30px" oninput="updShDumperTrip(${i},${di},'waste',this.value)" ${editable?'':'readonly'}></td>
+        <td><input type="number" value="${d.sp||''}" placeholder="0" style="width:30px" oninput="updShDumperTrip(${i},${di},'sp',this.value)" ${editable?'':'readonly'}></td>
+        <td class="num-cell" id="sh-${i}-du-tot-${di}">${dtot}</td>
+        <td>${editable?`<button class="btn btn-red btn-xs" onclick="delShDumper(${i},${di})">✕</button>`:''}</td>
+      </tr>`;
+    }).join('');
+    el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;color:var(--accent)">Shovel ${i+1}</span>
+      ${editable?`<button class="btn btn-red btn-xs" onclick="SD.shovelRows.splice(${i},1);renderTab('production')">✕</button>`:''}
+    </div>
+        <div class="gr2" style="margin-bottom:6px">
+      <div class="fg"><label>Shovel</label><select onchange="updShovel(${i},'shovel',this.value)" style="color:var(--accent)" ${editable?'':'disabled'}>
+        <option value="" ${!row.shovel?'selected':''} disabled>Select Shovel</option>
+        ${shovelMachines.map(s=>`<option value="${esc(s.id)}" ${row.shovel===s.id?'selected':''}>${esc(machineryOptionLabel(s))}</option>`).join('')}<option value="Other" ${row.shovel==='Other'?'selected':''}>Other</option>
+      </select></div>
+      <div class="fg"><label>Location</label>${row.location==='Enter Manually'?`<div style="display:flex;gap:4px;align-items:center">
+        <input type="text" id="sh-loc-manual-${i}" value="${esc(row.locationManual||'')}" placeholder="Enter location" oninput="updShovel(${i},'locationManual',this.value)" ${editable?'':'readonly'} style="flex:1">
+        ${editable?`<button type="button" class="btn btn-ghost btn-xs" title="Back to dropdown" onclick="revertShovelLocation(${i})">↺</button>`:''}
+      </div>`:`<select id="sh-loc-${i}" onchange="updShovelLocation(${i},this.value)" ${editable?'':'disabled'}>
+        <option value="" ${!row.location?'selected':''} disabled>Select</option>
+        ${LOCATION_OPTIONS.map(o=>`<option value="${esc(o)}" ${row.location===o?'selected':''}>${esc(o)}</option>`).join('')}
+        <option value="Enter Manually">Enter Manually</option>
+      </select>`}</div>
+    </div>
+    <div class="gr2" style="margin-bottom:8px">
+      <div class="fg"><label>Operator</label><select id="sh-op-${i}" onchange="updShovel(${i},'operator',this.value)" ${(editable&&mpSaved)?'':'disabled'}>
+        <option value="">--</option>${shOps.map(o=>`<option ${row.operator===o?'selected':''}>${o}</option>`).join('')}
+      </select></div>
+      <div class="fg"><label>Helper</label><select id="sh-help-${i}" onchange="updShovel(${i},'helper',this.value)" ${(editable&&mpSaved)?'':'disabled'}>
+        <option value="">--</option>${allMP.map(h=>`<option ${row.helper===h?'selected':''}>${h}</option>`).join('')}
+      </select></div>
+    </div>
+    <div class="tw"><table>
+      <thead><tr><th>Dumper</th><th>Operator</th><th>ROM</th><th>Waste</th><th>SP</th><th>Total</th><th></th></tr></thead>
+      <tbody>${dumperRowsHtml}</tbody>
+    </table></div>
+    ${editable?`<button class="btn btn-ghost btn-sm" style="margin-top:7px;color:var(--accent)" onclick="addShDumper(${i})">+ Add Dumper</button>`:''}
+    <div class="gr4" style="margin-top:10px">
+      <div class="fg"><label>ROM Trips</label><input type="number" value="${sT.rom}" readonly class="auto-field" id="sh-romT-${i}"></div>
+      <div class="fg"><label>Waste Trips</label><input type="number" value="${sT.waste}" readonly class="auto-field" id="sh-wasteT-${i}"></div>
+      <div class="fg"><label>SP Trips</label><input type="number" value="${sT.sp}" readonly class="auto-field" id="sh-spT-${i}"></div>
+      <div class="fg"><label>Total</label><input type="number" value="${sT.tot}" readonly class="auto-field" id="sh-tot-${i}"></div>
+    </div>`;
+    document.getElementById('shovel-rows-wrap').appendChild(el);
+  });
+
+  // Shovel-wise Trip Summary (auto-computed from the Shovel–Dumper table above — no re-entry)
+   const swsCard = mkEl('div','card');
+  swsCard.innerHTML = `<div class="card-title">📈 Shovel-wise Trip Summary</div>
+    <div class="tw"><table>
+      <thead><tr><th>Shovel</th><th>Operator</th><th>Helper</th><th style="text-align:center">ROM</th><th style="text-align:center">Waste</th><th style="text-align:center">SP</th><th style="text-align:center">Total</th></tr></thead>
+      <tbody id="sws-tbody"></tbody>
+    </table></div>`;
+  c.appendChild(swsCard);
+  (SD.shovelRows||[]).forEach((row,i) => {
+    const t = shovelTotals(i);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td id="sws-shovel-${i}">${esc(machineryDisplayName(row.shovel))}</td>
+      <td id="sws-op-${i}">${esc(row.operator||'—')}</td>
+      <td id="sws-help-${i}">${esc(row.helper||'—')}</td>
+      <td class="num-cell" id="sws-rom-${i}">${t.rom}</td>
+      <td class="num-cell" id="sws-waste-${i}">${t.waste}</td>
+      <td class="num-cell" id="sws-sp-${i}">${t.sp}</td>
+      <td class="num-cell" id="sws-tot-${i}">${t.tot}</td>`;
+    document.getElementById('sws-tbody').appendChild(tr);
+  });
+  if(!(SD.shovelRows||[]).length) {
+    const empty=document.getElementById('sws-tbody');
+    if(empty) empty.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted)">No shovels added yet</td></tr>';
+  }
+
+  // Dumper-wise Trip Summary (auto-computed by aggregating every dumper's
+  // trips across all shovels/operators in the Shovel–Dumper table above)
+   const dwsCard = mkEl('div','card');
+  dwsCard.innerHTML = `<div class="card-title">🚛 Dumper-wise Trip Summary</div>
+    <div class="tw"><table>
+      <thead><tr><th>Dumper</th><th>Operator</th><th style="text-align:center">ROM</th><th style="text-align:center">Waste</th><th style="text-align:center">SP</th><th style="text-align:center">Total</th></tr></thead>
+      <tbody id="dws-tbody"></tbody>
+    </table></div>`;
+  c.appendChild(dwsCard);
+  renderDumperWiseSummary();
+
+  // Totals — summed from every shovel's ROM/Waste/SP trips
+  const romT=(SD.shovelRows||[]).reduce((s,r,i)=>s+shovelTotals(i).rom,0);
+  const wasteT=(SD.shovelRows||[]).reduce((s,r,i)=>s+shovelTotals(i).waste,0);
+  const spT=(SD.shovelRows||[]).reduce((s,r,i)=>s+shovelTotals(i).sp,0);
+  SD.production=SD.production||{};
+  SD.production.wasteTrips=wasteT; SD.production.spTrips=spT;
+  SD.production.waste=wasteT*50; SD.production.sp=spT*100;
+
+  const totCard=mkEl('div','card');
+  totCard.innerHTML=`<div class="card-title">📊 Totals</div>
+    <div class="gr3">
+      <div class="fg"><label>ROM Trips</label><input type="number" id="tot-rom" value="${romT}" readonly class="auto-field"></div>
+      <div class="fg"><label>Waste Trips</label><input type="number" id="tot-waste" value="${wasteT}" readonly class="auto-field"></div>
+      <div class="fg"><label>SP Trips</label><input type="number" id="tot-sp" value="${spT}" readonly class="auto-field"></div>
+    </div>
+    <div class="gr3">
+      <div class="fg"><label>ROM (MT) 🖋️</label><input type="number" id="prod-rom" value="${SD.production?.rom||''}" placeholder="Enter MT" oninput="SD.production.rom=this.value" ${editable?'':'readonly'}></div>
+      <div class="fg"><label>Waste (MT) = T×50</label><input type="number" id="tot-waste-mt" value="${wasteT*50}" readonly class="auto-field"></div>
+      <div class="fg"><label>SP (MT) = T×100</label><input type="number" id="tot-sp-mt" value="${spT*100}" readonly class="auto-field"></div>
+    </div>
+    <div id="trip-val" style="font-size:12px;margin-top:6px"></div>`;
+  c.appendChild(totCard);
+  validateTrips();
+
+  const hrCard=mkEl('div','card');
+  hrCard.innerHTML=`<div class="card-title">⏱ Hourly Production</div>
+    <div class="gr2">
+      <div class="fg"><label>First Hour Production (MT)</label><input type="number" id="prod-first-hour" value="${SD.production?.firstHour||''}" placeholder="Enter MT" oninput="SD.production.firstHour=this.value" ${editable?'':'readonly'}></div>
+      <div class="fg"><label>Reason(If Any)</label><input type="text" id="prod-first-hour-remarks" value="${SD.production?.firstHourRemarks||''}" placeholder="Reason / remarks" oninput="SD.production.firstHourRemarks=this.value" ${editable?'':'readonly'}></div>
+      <div class="fg"><label>Last Hour Production (MT)</label><input type="number" id="prod-last-hour" value="${SD.production?.lastHour||''}" placeholder="Enter MT" oninput="SD.production.lastHour=this.value" ${editable?'':'readonly'}></div>
+      <div class="fg"><label>Reason(If Any)</label><input type="text" id="prod-last-hour-remarks" value="${SD.production?.lastHourRemarks||''}" placeholder="Reason / remarks" oninput="SD.production.lastHourRemarks=this.value" ${editable?'':'readonly'}></div>
+    </div>`;
+  c.appendChild(hrCard);
+
+  // Affected / Plant Stoppage
+  renderBulletCard(c,'📋 Production/Waste Mining Affected Due To','affected',SD.production?.affectedBy||[''],editable);
+  // Migrate legacy plain-text Plant Stoppage rows (before the
+  // Reason/Hours/Minutes breakdown existed) into the new structure.
+  SD.production=SD.production||{};
+  SD.production.plantStoppage = (SD.production.plantStoppage||[]).map(row =>
+    (typeof row === 'string') ? {reason:row, hours:'', minutes:''} : row
+  );
+  renderStoppageCard(c, editable);
+
+  const sb=mkEl('div','save-bar');
+  sb.innerHTML=`<button class="btn btn-primary" id="save-production-btn" onclick="saveTab('production')">💾 Save Production</button>`;
+  c.appendChild(sb);
+  validateTrips();
+}
+
+function updShovel(i,k,v){
+  (SD.shovelRows=SD.shovelRows||[])[i]=SD.shovelRows[i]||{};
+  SD.shovelRows[i][k]=v;
+
+  // Default Operator/Helper from the machinery allocation already saved
+  // in Allocation (allocation.html) for this Shovel, if one exists. This
+  // is only a starting value — both selects stay fully editable, and the
+  // user's own choice always wins over this default on future changes
+  // (only firing again if the Shovel itself is re-selected).
+  if(k==='shovel'){
+    const alloc=allocationForMachinery(v);
+    if(alloc){
+      if(alloc.operator){
+        SD.shovelRows[i].operator=alloc.operator;
+        const opEl=document.getElementById(`sh-op-${i}`);
+        if(opEl) opEl.value=alloc.operator;
+      }
+      if(alloc.helper){
+        SD.shovelRows[i].helper=alloc.helper;
+        const helpEl=document.getElementById(`sh-help-${i}`);
+        if(helpEl) helpEl.value=alloc.helper;
+      }
+    }
+  }
+
+  autoSave();
+  // Keep the Shovel-wise Trip Summary row in sync for the fields it displays
+  // (Shovel/Operator/Helper), without a full re-render (which would lose
+  // focus in the Location input) — always refresh all three since an
+  // auto-fill above may have changed Operator/Helper alongside Shovel.
+  const shSum=document.getElementById(`sws-shovel-${i}`); if(shSum) shSum.textContent=machineryDisplayName(SD.shovelRows[i].shovel);
+  const opSum=document.getElementById(`sws-op-${i}`); if(opSum) opSum.textContent=SD.shovelRows[i].operator||'—';
+  const helpSum=document.getElementById(`sws-help-${i}`); if(helpSum) helpSum.textContent=SD.shovelRows[i].helper||'—';
+}
+// Location dropdown (same pattern as machinery.html's "Status @ End"):
+// switching away from "Enter Manually" clears any previously typed manual
+// text; a full tab re-render is needed so the manual text input can
+// appear/disappear.
+function updShovelLocation(i,v){
+  (SD.shovelRows=SD.shovelRows||[])[i]=SD.shovelRows[i]||{};
+  SD.shovelRows[i].location=v;
+  if(v!=='Enter Manually') SD.shovelRows[i].locationManual='';
+  autoSave();
+  renderTab('production');
+}
+// Switches one shovel row's Location field back from the manual text
+// input to the dropdown (clears whatever was typed).
+function revertShovelLocation(i){
+  SD.shovelRows[i]=SD.shovelRows[i]||{};
+  SD.shovelRows[i].location='';
+  SD.shovelRows[i].locationManual='';
+  autoSave();
+  renderTab('production');
+}
+
+// ------------------------------------------------------------
+// Per-shovel nested dumper table (Shovel–Dumper Trips card)
+// ------------------------------------------------------------
+function shovelTotals(si){
+  const dumpers=(SD.shovelRows&&SD.shovelRows[si]&&SD.shovelRows[si].dumpers)||[];
+  const rom=dumpers.reduce((s,d)=>s+(+d.rom||0),0);
+  const waste=dumpers.reduce((s,d)=>s+(+d.waste||0),0);
+  const sp=dumpers.reduce((s,d)=>s+(+d.sp||0),0);
+  return {rom,waste,sp,tot:rom+waste+sp};
+}
+function addShDumper(si){
+  SD.shovelRows[si]=SD.shovelRows[si]||{};
+  SD.shovelRows[si].dumpers=SD.shovelRows[si].dumpers||[];
+  SD.shovelRows[si].dumpers.push({});
+  autoSave();
+  renderTab('production');
+}
+function delShDumper(si,di){
+  SD.shovelRows[si].dumpers.splice(di,1);
+  autoSave();
+  renderTab('production');
+}
+function updShDumper(si,di,k,v){
+  SD.shovelRows[si]=SD.shovelRows[si]||{};
+  SD.shovelRows[si].dumpers=SD.shovelRows[si].dumpers||[];
+  SD.shovelRows[si].dumpers[di]=SD.shovelRows[si].dumpers[di]||{};
+  SD.shovelRows[si].dumpers[di][k]=v;
+
+  // Default this dumper's Operator from the machinery allocation already
+  // saved in Allocation for this Dumper, if one exists — stays fully
+  // editable afterwards, same as the Shovel-level auto-fill above.
+  if(k==='dumper'){
+    const alloc=allocationForMachinery(v);
+    if(alloc && alloc.operator){
+      SD.shovelRows[si].dumpers[di].operator=alloc.operator;
+      const opEl=document.getElementById(`sh-${si}-du-op-${di}`);
+      if(opEl) opEl.value=alloc.operator;
+    }
+  }
+
+  autoSave();
+  renderDumperWiseSummary();
+}
+function updShDumperTrip(si,di,k,v){
+  updShDumper(si,di,k,v);
+  const d=SD.shovelRows[si].dumpers[di];
+  const dtot=(+d.rom||0)+(+d.waste||0)+(+d.sp||0);
+  const dEl=document.getElementById(`sh-${si}-du-tot-${di}`); if(dEl) dEl.textContent=dtot;
+  refreshShovelTotals(si);
+  refreshProductionTotals();
+  renderDumperWiseSummary();
+  validateTrips();
+}
+// Updates the per-shovel auto-computed totals (in the Shovel–Dumper card
+// and the Shovel-wise Trip Summary card) without a full re-render, so
+// the input the user is typing in doesn't lose focus.
+function refreshShovelTotals(si){
+  const t=shovelTotals(si);
+  const setV=(id,val)=>{const el=document.getElementById(id); if(el) el.value=val;};
+  const setT=(id,val)=>{const el=document.getElementById(id); if(el) el.textContent=val;};
+  setV(`sh-romT-${si}`,t.rom); setV(`sh-wasteT-${si}`,t.waste); setV(`sh-spT-${si}`,t.sp); setV(`sh-tot-${si}`,t.tot);
+  setT(`sws-rom-${si}`,t.rom); setT(`sws-waste-${si}`,t.waste); setT(`sws-sp-${si}`,t.sp); setT(`sws-tot-${si}`,t.tot);
+}
+// Refreshes the Totals card (ROM/Waste/SP trip + MT fields) from the
+// current shovel-wise totals, without a full re-render.
+function refreshProductionTotals(){
+  const romT=(SD.shovelRows||[]).reduce((s,r,i)=>s+shovelTotals(i).rom,0);
+  const wasteT=(SD.shovelRows||[]).reduce((s,r,i)=>s+shovelTotals(i).waste,0);
+  const spT=(SD.shovelRows||[]).reduce((s,r,i)=>s+shovelTotals(i).sp,0);
+  SD.production=SD.production||{};
+  SD.production.wasteTrips=wasteT; SD.production.spTrips=spT;
+  SD.production.waste=wasteT*50; SD.production.sp=spT*100;
+  const setV=(id,val)=>{const el=document.getElementById(id); if(el) el.value=val;};
+  setV('tot-rom',romT); setV('tot-waste',wasteT); setV('tot-sp',spT);
+  setV('tot-waste-mt',wasteT*50); setV('tot-sp-mt',spT*100);
+}
+
+// ------------------------------------------------------------
+// Dumper-wise Trip Summary — aggregates trips across all shovels,
+// grouped by unique Dumper + Operator combination (so the same
+// dumper with different operators, or the same operator on
+// different dumpers, each get their own row).
+// ------------------------------------------------------------
+function dumperWiseTotals(){
+  const map={};
+  (SD.shovelRows||[]).forEach(row=>{
+    (row.dumpers||[]).forEach(d=>{
+      if(!d.dumper && !d.operator && !(+d.rom) && !(+d.waste) && !(+d.sp)) return;
+      const dumper = d.dumper || '—';
+      const operator = d.operator || '—';
+      const key = `${dumper}\u0001${operator}`;
+      map[key] = map[key] || {dumper,operator,rom:0,waste:0,sp:0};
+      map[key].rom += (+d.rom||0);
+      map[key].waste += (+d.waste||0);
+      map[key].sp += (+d.sp||0);
+    });
+  });
+  return Object.values(map)
+    .map(v=>({...v, tot:v.rom+v.waste+v.sp}))
+    .sort((a,b)=> a.dumper.localeCompare(b.dumper) || a.operator.localeCompare(b.operator));
+}
+function renderDumperWiseSummary(){
+  const tbody=document.getElementById('dws-tbody'); if(!tbody) return;
+  const dwTotals=dumperWiseTotals();
+  if(!dwTotals.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted)">No dumper trips recorded yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = dwTotals.map(dw=>`<tr>
+      <td>${esc(machineryDisplayName(dw.dumper))}</td>
+      <td>${esc(dw.operator)}</td>
+      <td class="num-cell">${dw.rom}</td>
+      <td class="num-cell">${dw.waste}</td>
+      <td class="num-cell">${dw.sp}</td>
+      <td class="num-cell">${dw.tot}</td>
+    </tr>`).join('');
+}
+
+function validateTrips(){
+  const el=document.getElementById('trip-val'); if(!el) return true;
+  const sh=(SD.shovelRows||[]).reduce((s,r,i)=>s+shovelTotals(i).tot,0);
+  el.innerHTML = sh ? `<span style="color:var(--muted)">Total trips recorded: ${sh}</span>` : '';
+  const btn=document.getElementById('save-production-btn');
+  if(btn){btn.disabled=false;btn.title='';}
+  return true;
+}
+function renderBulletCard(c,title,key,items,editable){
+  const card=mkEl('div','card');
+  let html=`<div class="card-title">${title}</div><ul class="bullet-list">`;
+  items.forEach((item,i)=>{
+    html+=`<li class="bullet-item"><span class="bi-dot">•</span>
+      <input type="text" value="${item||''}" placeholder="Enter detail..." oninput="updBullet('${key}',${i},this.value)" ${editable?'':'readonly'}>
+      ${editable?`<button class="bi-del" onclick="delBullet('${key}',${i})">✕</button>`:''}</li>`;
+  });
+  html+=`</ul>`;
+  card.innerHTML=html;
+  if(editable){const ab=mkEl('button','btn btn-ghost btn-sm');ab.style.marginTop='7px';ab.textContent='+ Add';ab.onclick=()=>addBullet(key);card.appendChild(ab);}
+  c.appendChild(card);
+}
+function updBullet(k,i,v){if(k==='affected')SD.production.affectedBy[i]=v;autoSave();}
+function delBullet(k,i){if(k==='affected')SD.production.affectedBy.splice(i,1);renderTab('production');}
+function addBullet(k){
+  SD.production=SD.production||{};
+  if(k==='affected'){SD.production.affectedBy=SD.production.affectedBy||[];SD.production.affectedBy.push('');}
+  renderTab('production');
+}
+
+// ------------------------------------------------------------
+// Plant Stoppage card — Reason / Hours / Minutes per row, with an
+// auto-computed Total Plant Stoppage Duration at the bottom.
+// ------------------------------------------------------------
+function stoppageTotalMinutes(){
+  return (SD.production?.plantStoppage||[]).reduce((s,r)=>s+(+r.hours||0)*60+(+r.minutes||0),0);
+}
+function formatDuration(totalMin){
+  const h=Math.floor(totalMin/60), m=totalMin%60;
+  return `${h}h ${m}m`;
+}
+function renderStoppageCard(c, editable){
+  const rows = SD.production?.plantStoppage||[];
+  const card = mkEl('div','card');
+  const rowsHtml = rows.map((r,i)=>`<tr>
+      <td><input type="text" value="${r.reason||''}" placeholder="Reason for stoppage" style="min-width:170px" oninput="updStoppage(${i},'reason',this.value)" ${editable?'':'readonly'}></td>
+      <td><input type="number" value="${r.hours||''}" placeholder="0" style="width:60px" oninput="updStoppage(${i},'hours',this.value)" ${editable?'':'readonly'}></td>
+      <td><input type="number" value="${r.minutes||''}" placeholder="0" style="width:60px" oninput="updStoppage(${i},'minutes',this.value)" ${editable?'':'readonly'}></td>
+      <td>${editable?`<button class="btn btn-red btn-xs" onclick="delStoppage(${i})">✕</button>`:''}</td>
+    </tr>`).join('');
+  card.innerHTML = `<div class="card-title">🏭 Plant Stoppage</div>
+    <div class="tw"><table>
+      <thead><tr><th>Reason</th><th>Hours</th><th>Minutes</th><th></th></tr></thead>
+      <tbody id="stoppage-tbody">${rowsHtml || '<tr><td colspan="4" style="text-align:center;color:var(--muted)">No stoppages recorded</td></tr>'}</tbody>
+    </table></div>
+    <div class="fg" style="margin-top:8px;max-width:220px"><label>Total Plant Stoppage Duration</label>
+      <input type="text" id="stoppage-total" value="${formatDuration(stoppageTotalMinutes())}" readonly class="auto-field">
+    </div>`;
+  if(editable){
+    const ab=mkEl('button','btn btn-ghost btn-sm'); ab.style.marginTop='7px'; ab.textContent='+ Add Row';
+    ab.onclick=addStoppage; card.appendChild(ab);
+  }
+  c.appendChild(card);
+}
+function updStoppage(i,k,v){
+  SD.production=SD.production||{};
+  SD.production.plantStoppage=SD.production.plantStoppage||[];
+  SD.production.plantStoppage[i]=SD.production.plantStoppage[i]||{reason:'',hours:'',minutes:''};
+  SD.production.plantStoppage[i][k]=v;
+  autoSave();
+  const totEl=document.getElementById('stoppage-total');
+  if(totEl) totEl.value=formatDuration(stoppageTotalMinutes());
+}
+function delStoppage(i){
+  SD.production.plantStoppage.splice(i,1);
+  renderTab('production');
+}
+function addStoppage(){
+  SD.production=SD.production||{};
+  SD.production.plantStoppage=SD.production.plantStoppage||[];
+  SD.production.plantStoppage.push({reason:'',hours:'',minutes:''});
+  renderTab('production');
+}
+
+
+
+// ═══════════════════════════════════════════════════
+// SAVE LOGIC
+// ═══════════════════════════════════════════════════
+async function saveTab(tab){
+  collectCurrentTab();
+  if(tab==='production' && !validateTrips()){
+    showToast('Shovel trips and dumper trips must match before saving','err');
+    return;
+  }
+  SD.tabSaved=SD.tabSaved||{};
+  SD.tabSaved[tab]=true;
+  state.editMode[tab]=false;
+  const ok = await saveSD();
+  showToast(ok ? `${TAB_LABELS[tab]||tab} saved ✓` : `Save failed — check your connection`, ok?'ok':'err');
+  updateBanner();
+  buildTabs();
+  renderTab(tab);
+  await renderDateLog();
+}
+
+
+
+// ═══════════════════════════════════════════════════
+// LOADING OVERLAY
+// ═══════════════════════════════════════════════════
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function showLoadingScreen(){const ov=document.getElementById('loading-overlay');if(ov)ov.style.display='flex';}
+function hideLoadingScreen(){const ov=document.getElementById('loading-overlay');if(ov)ov.style.display='none';}
+
+
+// ═══════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════
+function mkEl(tag,cls,id){const el=document.createElement(tag);if(cls)el.className=cls;if(id)el.id=id;return el;}
+function fmtN(n){if(!n&&n!==0)return'0';return parseFloat(n).toLocaleString('en-IN');}
+function showToast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} on`;setTimeout(()=>t.className='toast',3200);}
+
+</script>
+<!-- ─── VANTA BACKGROUND ─── -->
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.VANTA) {
+      window.VANTA.FOG({
+        el: "#vanta-bg",
+        mouseControls: true,
+        touchControls: true,
+        gyroControls: false,
+        minHeight: 200.00,
+        minWidth: 200.00,
+        highlightColor: 0x0d0f14,
+        midtoneColor: 0xffffff,
+        lowlightColor: 0x181e2a,
+        baseColor: 0x0d0f14,
+        blurFactor: 0.48,
+        speed: 0.20,
+        zoom: 0.15
+      });
+    }
+  });
+</script>
+</body>
+</html>
+
+</body>
+</html>
