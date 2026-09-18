@@ -86,7 +86,7 @@ body {
 }
 
 #app-body > *,
-#tab-content > *:not(.save-bar,.sf),
+#tab-content > *:not(.save-bar,.sf,.edit-bar),
 .card,
 .gr2,
 .gr3,
