@@ -1,0 +1,2303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Deposit 11C shift reporting — Shift Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style1.css">
+<!-- Preload background engine scripts as early as possible so the animated
+     background is ready with no flash/delay once the page paints -->
+<link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js" as="script">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.fog.min.js" as="script">
+<!-- Loaded with "defer" so the browser starts fetching them immediately in parallel -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.fog.min.js"></script>
+
+<style>
+  /* Sidebar user badge (replaces the static "Mining Operations Tracker" tagline) */
+  .sb-user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .sb-user-row .user-badge-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sb-user-row .admin-tag {
+    font-size: 9px;
+    font-weight: 700;
+    color: #000;
+    background: var(--accent);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 4px;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+  }
+  .sb-user-row .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    padding: 3px 10px;
+    border-radius: var(--r);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: all 0.18s;
+    flex-shrink: 0;
+  }
+  .sb-user-row .btn-outline:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+<div id="vanta-bg"></div>
+
+<div class="sbo" id="sbo" onclick="closeSB()"></div>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="sb-head">
+    <h2>🌱Deposit 11C🌱</h2>
+    <div class="sb-user-row" id="sidebarUserBadge"></div>
+  </div>
+  <div class="sb-fixed">
+    <div class="sb-section">Reports</div>
+    <div class="sb-tile" id="sb-daily" onclick="setReport('daily')"><span class="icon">📋</span>Daily Report</div>
+    <div class="sb-tile" id="sb-cumul" onclick="setReport('cumul')"><span class="icon">📊</span>Cumulative Report</div>
+    <div class="sb-tile" onclick="location.href='shift-report.html'"><span class="icon">🧾</span>Shift Report Generator</div>
+    <div class="sb-tile" onclick="location.href='allocation-register.html'"><span class="icon">📑</span>Allocation Register</div>
+    <div class="sb-section">Master Data</div>
+    <div class="sb-tile" onclick="goResources()"><span class="icon">📁</span>Resources (Master List)</div>
+
+    <!-- SHIFT TOGGLE -->
+    <div class="sb-section">View</div>
+    <div class="toggle-row">
+      <div><div class="toggle-lbl">Light / Dark</div><div class="toggle-sub" id="theme-toggle-lbl">Dark theme enabled</div></div>
+      <label class="ts"><input type="checkbox" id="theme-toggle" onchange="onThemeToggle()"><span class="ts-slider"></span></label>
+    </div>
+  </div>
+
+  <!-- DATE LOG — the only part of the sidebar that scrolls -->
+  <div class="sb-log-wrap">
+    <div class="sb-section">Report Log</div>
+    <div class="sb-scroll" id="date-log"></div>
+  </div>
+
+  <div class="sb-foot">
+    <div class="sb-credit">Designed and managed by Vikrant Vishal 😎</div>
+  </div>
+</div>
+
+<!-- APP HEADER (unified with main-menu.html / Attendance Portal) -->
+<header class="app-header">
+  <div class="header-top">
+    <div class="titles">
+      <button class="menu-btn" onclick="toggleSB()" aria-label="Open menu">☰</button>
+      <div class="logo-icon">📝</div>
+      <div>
+        <h1>DEPOSIT 11C</h1>
+        <div class="sub">Mining Operations</div>
+      </div>
+    </div>
+    <div class="home-date-group">
+      <a class="home-btn" href="index.html" title="Home" aria-label="Back to Home">🏠</a>
+      <!-- Moved datetime-chip here -->
+      <div class="datetime-chip">
+        <div class="time" id="clock">--:--</div>
+        <div id="topdate">--</div>
+      </div>
+    </div>
+  </div>
+  <div class="header-bottom">
+    <!-- <div id="sync-dot" class="sync-dot"></div> -->
+  </div>
+</header>
+
+<!-- APP BODY -->
+<div id="app-body">
+  <div class="tabs-wrap" id="tabs-wrap"></div>
+  <div id="tab-content"></div>
+
+<div class="toast" id="toast"></div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" style="display:none;position:fixed;inset:0;background:rgba(10,14,20,0.92);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="font-family:'Barlow Condensed',sans-serif;font-size:25px;font-weight:800;color:#f5a623;letter-spacing:1px">🌱Deposit 11C🌱</div>
+  <div style="font-size:13px;color:#6a8099">Loading data...</div>
+  <div style="width:48px;height:48px;border:3px solid #243040;border-top-color:#f5a623;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</div>
+
+<!-- FIREBASE (Firestore) — shared config with the Deposit-11C Attendance System -->
+<script type="module">
+  import {
+    db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp
+  } from "./firebase-config.js";
+  import { requireAuth, renderUserBadge } from "./auth.js";
+  // Same login/session system used by Attendance Management. If nobody is
+  // signed in this redirects to login.html?redirect=shift-report.html(+query),
+  // preserving ?auto=1 so the user lands back on the exact page after login.
+  window.__d11cAuthed = !!requireAuth();
+  // Populate the sidebar with the signed-in user's name + a Logout button.
+  // renderUserBadge() is the exact same function main-menu.html uses, so the
+  // displayed name (from the active session) and the Logout behaviour
+  // (session clear + redirect to login.html) are identical to the rest of
+  // the portal — nothing here is hard-coded.
+  if (window.__d11cAuthed) {
+    renderUserBadge('sidebarUserBadge');
+    // Prefix the sidebar's user name with 👤 without touching auth.js's
+    // shared renderUserBadge() (used unchanged on other pages).
+    const sbNameEl = document.querySelector('#sidebarUserBadge .user-badge-name');
+    if (sbNameEl) sbNameEl.prepend('👤 ');
+  }
+  window.fb = { db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp };
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════
+const SHIFT_NAMES = {1:'First Shift',2:'Second Shift',3:'Night Shift'};
+// Same tab list as overview.html/manpower.html/etc. — used only to read
+// each report's tabSaved/finalSubmitted status for the sidebar Report Log
+// (this page has no tabs of its own to save).
+const SAVE_TABS = ['manpower','production','drilling','machinery','allocation','remarks'];
+const REPORT_TYPES = [
+  {value:'all', label:'All Report'},
+  {value:'shovel', label:'Shovel Shift Report'},
+  {value:'dumper', label:'Dumper Shift Report'},
+  {value:'drill', label:'Drill Shift Report'},
+  {value:'dozer', label:'Dozer Shift Report'},
+  {value:'dumper-platform', label:'Dumper Platform Report'}
+];
+
+
+function buildAllReportHtml(data, date, shift){
+  const reports = [
+    ['shovel', buildShovelReportHtml(data, date, shift)],
+    ['dumper', buildDumperReportHtml(data, date, shift)],
+    ['drill', buildDrillReportHtml(data, date, shift)],
+    ['dozer', buildDozerReportHtml(data, date, shift)]
+  ];
+  const parts = reports.map(([type, html]) => {
+    const document = new DOMParser().parseFromString(html, 'text/html');
+    const main = document.querySelector('.sr-page');
+    if (!main) return '';
+    main.classList.add('all-report-page', `all-${type}-page`);
+    return main.outerHTML;
+  }).join('');
+  const styles = reports.map(([, html]) => {
+    const document = new DOMParser().parseFromString(html, 'text/html');
+    return [...document.querySelectorAll('style')].map(style => style.textContent).join('\n');
+  }).join('\n');
+
+  return `<!doctype html><html><head><meta charset="UTF-8"><title>All Shift Reports - ${escapeHtml(fmtReportDate(date))} - ${escapeHtml(shiftShortLabel(+shift))}</title>
+    <style>${styles}
+      .all-report-page { break-after: page; page-break-after: always; }
+      .all-report-page:last-child { break-after: auto; page-break-after: auto; }
+      .all-shovel-page .sr-table tbody tr { height: 0.36in; }
+      .all-dumper-page .sr-table tbody tr { height: 0.17in; }
+      .all-dumper-page .sr-operator.sr-single-op div { min-height: 0.17in; }
+      .all-dumper-page .sr-dumper-detail-grid { min-height: 0.17in; }
+      .all-shovel-page .sr-box-production { font-weight: 700; }
+    <\/style><\/head><body>${parts}<\/body><\/html>`;
+}
+
+// ═══════════════════════════════════════════════════
+// REPORT PRINT ENGINE (shared by every report preview below)
+//
+// Why not a hidden <iframe> + iframe.contentWindow.print()?
+// iOS Safari cannot print an iframe on its own: it sends the WHOLE top-level
+// page (header, sidebar, selectors, buttons...) to the print sheet. Calling
+// window.print() on the top-level document is the one approach that behaves
+// identically on iPhone, Android and desktop, so the report is rendered into
+// a print-only host element of THIS page and everything else is hidden with
+// @media print.
+//
+//  • The report sits in a Shadow DOM, so its stylesheet (bare `table`, `*`,
+//    `body` rules...) can neither leak into the app nor be affected by it.
+//    The report CSS is not edited: `body` is mapped to a wrapper <div> and
+//    @page is hoisted to the document (the only place browsers read it).
+//  • Every rule that hides the app lives inside @media print and is keyed on
+//    html.report-printing, so the on-screen UI is never touched.
+//  • Clean-up does not rely on `afterprint` (unreliable on iOS/Android); the
+//    print-only state is dropped on the next tap/click/key press instead.
+// ═══════════════════════════════════════════════════
+const REPORT_PRINT_HOST_ID = 'report-print-host';
+let reportPrintCleanup = null;
+
+function ensureReportPrintHost(){
+  if(!document.getElementById('report-print-css')){
+    const st = document.createElement('style');
+    st.id = 'report-print-css';
+    st.textContent = `
+      #${REPORT_PRINT_HOST_ID} { all: initial; display: none; }
+      @media print {
+        html.report-printing,
+        html.report-printing body {
+          display: block !important; position: static !important;
+          width: auto !important; max-width: none !important;
+          height: auto !important; min-height: 0 !important; max-height: none !important;
+          margin: 0 !important; padding: 0 !important;
+          overflow: visible !important; background: #fff !important;
+          border: 0 !important; box-shadow: none !important; transform: none !important;
+        }
+        html.report-printing body::before,
+        html.report-printing body::after { display: none !important; }
+        html.report-printing body > *:not(#${REPORT_PRINT_HOST_ID}) { display: none !important; }
+        html.report-printing #${REPORT_PRINT_HOST_ID} { display: block !important; }
+      }`;
+    document.head.appendChild(st);
+  }
+  let host = document.getElementById(REPORT_PRINT_HOST_ID);
+  if(!host){
+    host = document.createElement('div');
+    host.id = REPORT_PRINT_HOST_ID;
+    host.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(host);
+  }
+  if(!host.shadowRoot) host.attachShadow({ mode: 'open' });
+  return host;
+}
+
+function endReportPrint(){
+  if(!reportPrintCleanup) return;
+  const fn = reportPrintCleanup;
+  reportPrintCleanup = null;
+  fn();
+}
+
+function armReportPrintCleanup(prevTitle){
+  const events = ['pointerdown', 'touchstart', 'mousedown', 'keydown'];
+  const armedAt = Date.now();
+  const onInteract = () => { if(Date.now() - armedAt > 600) endReportPrint(); };
+  events.forEach(ev => document.addEventListener(ev, onInteract, { capture: true, passive: true }));
+  reportPrintCleanup = () => {
+    events.forEach(ev => document.removeEventListener(ev, onInteract, true));
+    document.documentElement.classList.remove('report-printing');
+    document.getElementById('report-print-page-css')?.remove();
+    const host = document.getElementById(REPORT_PRINT_HOST_ID);
+    if(host && host.shadowRoot) host.shadowRoot.innerHTML = '';
+    document.title = prevTitle;
+  };
+}
+
+async function printReportHtml(html){
+  endReportPrint(); // drop any earlier report that is still waiting to be cleaned up
+  const host = ensureReportPrintHost();
+  const shadow = host.shadowRoot;
+
+  // The report builders return a full standalone document; split it up.
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+
+  // "Save as PDF" takes its file name from the page title. Set it FIRST, before the
+  // waits below: iOS reads the title asynchronously, so changing it in the same
+  // instant as print() can be missed and the old page title gets used instead.
+  const prevTitle = document.title;
+  if(doc.title) document.title = doc.title;
+  try {
+  const pageRules = [];
+  let css = [...doc.querySelectorAll('style')].map(s => s.textContent).join('\n');
+  css = css.replace(/@page\s*[^{]*\{[^}]*\}/g, m => { pageRules.push(m.replace(/\s+/g, ' ').trim()); return ''; });
+  css = css.replace(/(^|[{}\s,])body(?=\s*[{,])/g, '$1.report-body');
+  shadow.innerHTML = `<style>${css}</style><div class="report-body">${doc.body.innerHTML}</div>`;
+
+  let pageStyle = document.getElementById('report-print-page-css');
+  if(!pageStyle){
+    pageStyle = document.createElement('style');
+    pageStyle.id = 'report-print-page-css';
+    document.head.appendChild(pageStyle);
+  }
+  pageStyle.textContent = [...new Set(pageRules)].join('\n');
+
+  // Let the logos finish decoding, then give layout a moment (same 350ms as before).
+  const imgs = [...shadow.querySelectorAll('img')];
+  await Promise.race([
+    Promise.all(imgs.map(img => (img.decode ? img.decode() : Promise.resolve()).catch(() => {}))),
+    new Promise(res => setTimeout(res, 2000))
+  ]);
+  await new Promise(res => setTimeout(res, 350));
+
+  armReportPrintCleanup(prevTitle);          // restores the page title on the next tap/click/key
+  document.documentElement.classList.add('report-printing');
+  window.print();
+  } catch(e) {
+    document.title = prevTitle;
+    throw e;
+  }
+}
+
+function openAllReportPreview(data, date, shift){
+  return printReportHtml(buildAllReportHtml(data, date, shift));
+}
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let state = { report:'shift-report', currentTab:'shift-report' };
+let isLightTheme = false;
+
+// ═══════════════════════════════════════════════════
+// STORAGE HELPERS (local — UI preferences only, e.g. theme
+// and which date/shift is currently open. All report data
+// and master lists live in Firestore, never in localStorage.)
+// ═══════════════════════════════════════════════════
+const ls = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e) { return null; } };
+const ss = (k,v) => localStorage.setItem(k, JSON.stringify(v));
+isLightTheme = ls('theme_mode') === 'light';
+
+// ═══════════════════════════════════════════════════
+// FIREBASE (Firestore) DATA LAYER
+// Same Firebase project/config as the Deposit-11C Attendance
+// System (see firebase-config.js). Only used here for the
+// sidebar's Report Log, which reads shiftReports/{date}_shift{n}.
+// ═══════════════════════════════════════════════════
+function fbCol(name){ return window.fb.collection(window.fb.db, name); }
+function fbDocRef(name,id){ return window.fb.doc(window.fb.db, name, String(id)); }
+
+let resources = { machinery:[] };
+async function loadResources(){
+  try{
+    const machSnap = await window.fb.getDocs(fbCol('machinery'));
+    const machinery = [];
+    machSnap.forEach(d=>machinery.push({id:d.id, ...d.data()}));
+    resources = { machinery };
+  }catch(e){
+    console.warn('Failed to load machinery master list from Firestore', e);
+    resources = { machinery:[] };
+  }
+}
+function machineryDisplayName(id){
+  if(!id) return '';
+  const machine = resources.machinery.find(m=>m.id===id);
+  return machine?.name || id;
+}
+// Active (non-Inactive) machines from the machinery master list, in the
+// exact order Firestore returned them — the same order machinery.html's
+// per-category tabs preserve (its category sort is stable, so relative
+// order within a category is untouched).
+function activeMachinery(){
+  return (resources.machinery||[]).filter(m=>m.status!=='Inactive');
+}
+// Case/whitespace-insensitive category match against a machine's raw
+// Group value — mirrors normMachGroup() in machinery.html, scoped to the
+// two categories this report needs (Shovel, Rock Breaker).
+const REPORT_MACH_CATS = ['Shovel','Rock Breaker'];
+function reportMachGroup(m){
+  const raw = String(m.group||'').trim();
+  return REPORT_MACH_CATS.find(cat=>cat.toLowerCase()===raw.toLowerCase()) || raw;
+}
+// This shovel's Shovel-wise Trip Summary row from production.html
+// (SD.shovelRows / data.shovelRows) — carries Operator/Helper/trip counts
+// for Shovel-category machines. Not used for Rock Breaker.
+function shovelDataForMachine(data, machineId){
+  return (data.shovelRows||[]).find(r=>r && r.shovel===machineId) || null;
+}
+// This machine's Machinery Allocation row from allocation.html
+// (SD.allocationRows / data.allocationRows) — carries Operator/Helper for
+// Rock Breaker-category machines, which aren't part of the Shovel-Dumper
+// trip table in production.html.
+function allocationForMachine(data, machineId){
+  return (data.allocationRows||[]).find(r=>r && r.machinery===machineId) || null;
+}
+// Builds the report's row list straight from the machinery master list:
+// every active Shovel-category machine (in machinery.html's Shovel-tab
+// order), followed by every active Rock Breaker-category machine (in its
+// own tab order) — regardless of whether that machine has an entry in
+// production.html's Shovel-wise Trip Summary. Operator/Helper come from
+// that trip summary for Shovel machines, and from allocation.html for
+// Rock Breaker machines; a machine with no matching entry there simply
+// gets a blank Operator/Helper. This replaces the previous approach of
+// deriving the row list only from data.shovelRows.
+function allocationForMachine(data, machineId){
+  return (data.allocationRows||[]).find(r=>r && r.machinery===machineId) || null;
+}
+
+// Updated to map multiple rows if a shovel has multiple crews
+function reportMachineRows(data){
+  const shovels = activeMachinery().filter(m=>reportMachGroup(m)==='Shovel');
+  const rockBreakers = activeMachinery().filter(m=>reportMachGroup(m)==='Rock Breaker');
+  
+  const expandedRows = [];
+
+  shovels.forEach(m => {
+    const machineId = m.id;
+    const md = data.machinery?.[machineId] || {};
+    
+    // Find all crew entries for this shovel in production.html data
+    const crews = (data.shovelRows || []).filter(r => r && r.shovel === machineId);
+    
+    if (crews.length === 0) {
+      // No production data for this shovel, just show one empty row
+      expandedRows.push({
+        machineId, md, operator: '', helper: '', trips: {rom:0,sp:0,waste:0}, isFirst: true
+      });
+    } else {
+      // Multiple crews: push one row for each, but only the first gets machine details
+      crews.forEach((crewRow, index) => {
+        expandedRows.push({
+          machineId, 
+          md, 
+          operator: crewRow.operator || '', 
+          helper: crewRow.helper || '', 
+          trips: shovelTotalsFromRow(crewRow), 
+          isFirst: (index === 0) 
+        });
+      });
+    }
+  });
+
+  rockBreakers.forEach(m => {
+    const machineId = m.id;
+    const md = data.machinery?.[machineId] || {};
+    const alloc = allocationForMachine(data, machineId);
+    expandedRows.push({
+      machineId, 
+      md, 
+      operator: alloc?.operator || '', 
+      helper: alloc?.helper || '', 
+      trips: {rom:0,sp:0,waste:0}, 
+      isFirst: true
+    });
+  });
+
+  return expandedRows;
+}
+
+// ═══════════════════════════════════════════════════
+// SHIFT DATE / SHIFT HELPERS (shared with the rest of the app)
+// ═══════════════════════════════════════════════════
+function today() { return new Date().toISOString().split('T')[0]; }
+function getShiftDate() { return ls('shift_date') || today(); }
+function getShiftNum() { return ls('shift_num') || 1; }
+
+function fmtDateWithDay(dateInput) {
+  const d = typeof dateInput === 'string' ? new Date(dateInput+'T00:00:00') : new Date(dateInput);
+  const main = d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const day = d.toLocaleDateString('en-IN',{weekday:'short'});
+  return `${main} (${day})`;
+}
+
+// ═══════════════════════════════════════════════════
+// CLOCK & INIT
+// ═══════════════════════════════════════════════════
+function tickClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent = n.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+  document.getElementById('topdate').textContent = fmtDateWithDay(n);
+}
+setInterval(tickClock,1000); tickClock();
+
+window.onload = async () => {
+  if (!window.__d11cAuthed) return; // not signed in — requireAuth() is already redirecting to login.html
+  applyTheme();
+  showLoadingScreen();
+  document.getElementById('sb-daily').classList.toggle('on', false);
+  document.getElementById('sb-cumul').classList.toggle('on', false);
+  buildTabs();
+  await loadResources();
+  renderTab('shift-report');
+  await renderDateLog();
+  hideLoadingScreen();
+};
+
+// Manual "Refresh from Cloud" — re-pulls the sidebar report log from Firestore.
+async function manualRefresh(){
+  showLoadingScreen();
+  try{
+    await renderDateLog();
+    showToast('Refreshed from cloud ✓','ok');
+  }catch(e){
+    showToast('Refresh failed: '+e.message,'err');
+  }
+  hideLoadingScreen();
+  closeSB();
+}
+
+// ═══════════════════════════════════════════════════
+// TABS / NAVIGATION
+// ═══════════════════════════════════════════════════
+function buildTabs() {
+  const tw = document.getElementById('tabs-wrap');
+  tw.innerHTML = '';
+  const b = document.createElement('button');
+  b.className = 'tab-btn active';
+  b.textContent = 'Shift Report';
+  tw.appendChild(b);
+}
+function renderTab(name) {
+  const c = document.getElementById('tab-content');
+  c.innerHTML = '';
+  renderShiftReportSelector(c);
+}
+
+function toggleSB() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sbo').classList.toggle('on'); }
+function closeSB() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbo').classList.remove('on'); }
+
+function setReport(r) {
+  if (r === 'cumul') location.href = 'cumulative.html';
+  else location.href = 'overview.html';
+}
+function goResources() {
+  location.href = 'resources.html';
+}
+
+// ═══════════════════════════════════════════════════
+// SIDEBAR / THEME
+// ═══════════════════════════════════════════════════
+function applyTheme() {
+  document.body.classList.toggle('light-theme', isLightTheme);
+  const tg = document.getElementById('theme-toggle');
+  if(tg) tg.checked = isLightTheme;
+  const lbl = document.getElementById('theme-toggle-lbl');
+  if(lbl) lbl.textContent = isLightTheme ? 'Light theme enabled' : 'Dark theme enabled';
+}
+function onThemeToggle() {
+  isLightTheme = document.getElementById('theme-toggle').checked;
+  ss('theme_mode', isLightTheme ? 'light' : 'dark');
+  applyTheme();
+}
+
+// ═══════════════════════════════════════════════════
+// DATE LOG (sidebar)
+// ═══════════════════════════════════════════════════
+async function renderDateLog() {
+  const el = document.getElementById('date-log');
+  if(!el) return;
+  el.innerHTML = '<div style="padding:10px 16px;font-size:13px;color:var(--muted2)">Loading…</div>';
+
+  // scan last 30 days
+  const days = [];
+  for(let i=0;i<30;i++) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    days.push(d.toISOString().split('T')[0]);
+  }
+  const cutoff = days[days.length-1];
+
+  // {date: {1:{tabSaved,finalSubmitted}, 2:..., 3:...}}
+  const byDate = {};
+  try{
+    const q = window.fb.query(fbCol('shiftReports'), window.fb.where('date','>=',cutoff));
+    const snap = await window.fb.getDocs(q);
+    snap.forEach(d => {
+      const data = d.data();
+      if(!data.date) return;
+      byDate[data.date] = byDate[data.date] || {};
+      byDate[data.date][data.shift] = {
+        tabSaved: data.tabSaved || {},
+        finalSubmitted: !!data.finalSubmitted
+      };
+    });
+  }catch(e){
+    console.warn('Failed to load report log from Firestore', e);
+  }
+
+  let html = '';
+  days.forEach(date => {
+    const shifts = [1,2,3];
+    let hasAny = false;
+    let shiftHtml = '';
+    shifts.forEach(s => {
+      const entry = byDate[date] && byDate[date][s];
+      let cls = 'ls-empty', lbl = SHIFT_NAMES[s].replace(' Shift','');
+      if(entry){
+        const anyTabSaved = SAVE_TABS.some(t=>entry.tabSaved?.[t]);
+        const allTabsSaved = SAVE_TABS.every(t=>entry.tabSaved?.[t]);
+        if(anyTabSaved) hasAny = true;
+        if(anyTabSaved && entry.finalSubmitted && allTabsSaved) cls = 'ls-saved';       // 🟢 all tabs + Final Submit done
+        else if(anyTabSaved) cls = 'ls-partial';                                        // 🟡 some tabs saved, not finalized
+        // else: no tab saved yet → stays 'ls-empty' (⚪), even if the doc exists
+      }
+      shiftHtml += `<span class="log-shift ${cls}" onclick="loadDateShift('${date}',${s})">${lbl}</span>`;
+    });
+    if(hasAny || date===today()) {
+      const df = new Date(date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+      html += `<div class="log-item"><div class="log-date">${df}</div><div class="log-shifts">${shiftHtml}</div></div>`;
+    }
+  });
+  el.innerHTML = html || '<div style="padding:10px 16px;font-size:13px;color:var(--muted2)">No saved reports yet</div>';
+}
+function loadDateShift(date, shift) {
+  ss('shift_date',date); ss('shift_num',shift);
+  closeSB();
+  const dEl = document.getElementById('sr-date');
+  const sEl = document.getElementById('sr-shift');
+  if(dEl) dEl.value = date;
+  if(sEl) sEl.value = shift;
+}
+
+// ═══════════════════════════════════════════════════
+// SHIFT REPORT — selection card
+// ═══════════════════════════════════════════════════
+function renderShiftReportSelector(c){
+  const card=mkEl('div','card');
+  const shiftOptions = `
+    <option value="1">1st</option>
+    <option value="2">2nd</option>
+    <option value="3">Night</option>`;
+  const reportOptions = REPORT_TYPES.map(r=>`<option value="${r.value}">${r.label}</option>`).join('');
+  card.innerHTML=`<div class="card-title">🧾 Shift Report</div>
+    <div class="gr2">
+      <div class="fg"><label>Select Date</label><input type="date" id="sr-date" value="${getShiftDate()}"></div>
+      <div class="fg"><label>Select Shift</label><select id="sr-shift">${shiftOptions}</select></div>
+    </div>
+    <div class="fg"><label>Select Report Type</label><select id="sr-report-type">${reportOptions}</select></div>
+    <div class="btn-row"><button class="btn btn-primary" onclick="generateReport()">Generate Report</button></div>`;
+  c.appendChild(card);
+  const sEl = card.querySelector('#sr-shift');
+  if(sEl) sEl.value = String(getShiftNum());
+  const res=mkEl('div'); res.id='shift-report-results'; c.appendChild(res);
+}
+
+async function generateReport(){
+  const date = document.getElementById('sr-date')?.value;
+  const shift = document.getElementById('sr-shift')?.value;
+  const reportType = document.getElementById('sr-report-type')?.value;
+  if(!date || !shift || !reportType){ showToast('Select date, shift and report type','err'); return; }
+  
+  if(reportType !== 'all' && reportType !== 'shovel' && reportType !== 'drill' && reportType !== 'dozer' && reportType !== 'dumper'){
+    showToast('PDF generation is currently available for All, Shovel, Drill, Dozer and Dumper Shift Reports only','err');
+    return;
+  }
+  
+  ss('shift_date', date); ss('shift_num', +shift);
+  const typeLabel = REPORT_TYPES.find(r=>r.value===reportType)?.label || reportType;
+  const btn = document.querySelector('#shift-report-results')?.previousElementSibling?.querySelector('.btn-primary');
+  if(btn) btn.disabled = true;
+  showToast(`Generating ${typeLabel} — ${fmtDateWithDay(date)}, ${SHIFT_NAMES[shift]}…`,'ok');
+  try{
+    const snap = await window.fb.getDoc(fbDocRef('shiftReports', `${date}_shift${shift}`));
+    if(!snap.exists()){
+      showToast('No submitted shift report found for the selected date and shift','err');
+      return;
+    }
+    const data = snap.data();
+    if (reportType === 'all') {
+      await openAllReportPreview(data, date, shift);
+    } else if (reportType === 'shovel') {
+      await openShovelReportPreview(data, date, shift);
+    } else if (reportType === 'drill') {
+      await openDrillReportPreview(data, date, shift);
+    } else if (reportType === 'dozer') {
+      await openDozerReportPreview(data, date, shift);
+    } else if (reportType === 'dumper') {
+      await openDumperReportPreview(data, date, shift);
+    }
+  }catch(e){
+    console.error(e);
+    showToast('Report generation failed: '+e.message,'err');
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════
+// SHOVEL SHIFT REPORT PDF PREVIEW
+// A4 landscape page setup comes from SAMPLE REPORT.xlsx:
+// left 0.35in, right 0.2in, top/bottom 0.25in.
+// ═══════════════════════════════════════════════════
+const SHOVEL_REPORT_MARGINS = { left:'0.25in', right:'0.25in', top:'0.3in', bottom:'0.3in' };
+const NMDC_LOGO_DATA_URI = "data:image/jpeg;base64,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";
+const GPTW_LOGO_DATA_URI = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAyADIAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAJYAeADASIAAhEBAxEB/8QAGwABAAMBAQEBAAAAAAAAAAAAAAUGBwQDAgH/xABMEAABAwMBAwYKBwUGBgIDAQAAAQIDBAURBhIhMRNBUWFxkQcUFSI1NnOBsbIyUlRydKHBIzNCktEWJGLh8PEXNENTk9JlgjdEorP/xAAaAQEAAwEBAQAAAAAAAAAAAAAAAQIEAwUG/8QANBEBAAIBAgMHBAEDBAIDAAAAAAECAwQREiExBRMUMjNRcRVBUpEiYYGhIzXh8ELRNLHB/9oADAMBAAIRAxEAPwDTgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH4QGsKuoo7bFJSzOicsyIqt6MKWArOuvRMPt0+VxW/llo0kROesT7qt5cuv26bvHly6/bpu8jgYuKfd9X4fF+MfpI+XLr9um7x5cuv26bvI4Din3PD4vxj9JHy5dft03ePLl1+3Td5HAcU+54fF+MfpI+XLr9um7x5cuv26bvI4Din3PD4vxj9JHy5dft03ePLl1+3Td5HAcU+54fF+MfpI+XLr9um7x5cuv26bvI4Din3PD4vxj9JHy5dft03ePLl1+3Td5HAcU+54fF+MfpI+XLr9um7x5cuv26bvI4Din3PD4vxj9JHy5dft03ePLl1+3Td5HAcU+54fF+MfpI+XLr9um7x5cuv26bvI4Din3PD4vxj9JHy5dft03ePLl1+3Td5HAcU+54fF+MfpI+XLr9um7x5cuv26bvI4Din3PD4vxj9JHy5dft03ePLl1+3Td5HAcU+54fF+MfpI+XLr9um7x5cuv26bvI4Din3PD4vxj9JHy5dft03ePLl1+3Td5HAcU+54fF+MfpI+XLr9um7x5cuv26bvI4Din3PD4vxj9JHy5dft03ePLl1+3Td5HAcU+54fF+MfpI+XLr9um7x5cuv26bvI4Din3PD4vxj9ND0lVVFXaXSVMrpH8qqZd0YQnCu6I9DP9q74IWM208sPlNXERmtEe4ACzOAAAAAAAAAAAAAAAAAAAAAAAAFZ116Jh9unyuLMVnXXomH26fK4pfyy06L16/KigAwvsAH61Fc5GtRVVVwiInEutg0vFFGlRc40fKu9sa70b29Kl6Um3Rm1Oqpp672VKnoKyqTNPTSyJ0taqod39mbzjPia/wDkb/U0drWsaiNRGonMiYP3KdKHeMEfd41u2Msz/GsMpqLfWUyZnpZY06XNXBzGvOa1yKioiovMqFavul4ahj6i3tSOfisafRd/RStsO3Rp0/a1bTw5I2UYH69jmPcx7Va5q4VF4op+HB7ETvG4ACEgAAAAAAAAAAAAAAAAOu322quUqx0jEcrUyqquEQk7hpma32uSsqJ2bTFb+za1V4qicS0VmY3cL6nFS0UtPOUCACruAAAAAAAAAAC/aI9DP9q74IWIruiPQz/au+CFiN1PLD4/Wevf5AAXZgAAAAAAAAAAAAAAAAAAAAAAAArOuvRMPt0+VxZis669Ew+3T5XFL+WWnRevX5UUAGF9etWirY2WV9wlRFSNdmNFTn51LbXVkNBSPqZ1VGMTmTKr1HHpqJsVhpUYn0mbS9q7yE13UPRKWnRfMdl69qf7myP4U3fM3idXq+GZ5b/4hDXXUNdcHuakjoYc7mMXGU615yJyvSp+HRS0VVWK5KWB8uzx2UzgyzNrS+hrjxYa8oiId9q1DXW6RqOkdNAm5Y3rnCdS8xaKzVdBBTMfAqzSPblGN/h7V5ioeRLp9hm/lHkS6fYZv5TpW14jbZhzafSZbxaZiP79XhcKx9fWyVUjWtdIucN4JuwfVBbay4q9KOHlVZja85ExntU/Z7XX08TpJ6SVjG8XKm5CxaC/e1v3WfqVrXittZ3z54w6ebYtp2QNZZLlQwLPVU3JxouFdttX4Ke9Fpy5VlOk7YmxxqmWrI7G0nYaHU00NVGkc7Ee1HI7C9KcBPNDFGqSSMZlFxlcHbuaw8r6tmtWIiObJT7jjkmejImOe9eDWplVPyNjpJGxsRVc5cIic5otgskVspmuejX1Lk89+OHUhxpj4perq9ZXT0ifvKrQ6SusjEc9sUX+Fz9/5ZPqXSF0Y1XM5GTCbkR6oq95bq69263yclUzokn1WorlTuPOk1DbKyZIoqjD14I5qtz3nbu8fTd5XjtZMccV5fDOqinmpZliqInRvau9HIeRp14tMF1pVjk82RN7JETe1TNqmCSlqJIJm4kjXZVDlkx8L1NFrY1Fdp5TDy6kJeh03c62FJWRNjYqZasq42vcTOkbIx0aXGqZlVX9i1eGPrf0LVUVENLEstRI2NicVcuC9MUTG9mPV9p2rfu8Mbyoj9IXRrVVvIOVOZHrle9CNZaa99atGlM5KhEVdhyom7pyu4vbNTWh8vJ+NIi9KtVE7+BJNbDM5lQ1GuVE816dClu6pPSXD6lqcXqV/wAM4n0/daeB801IrY2NVzl5Rq4TvOOjpJ62dIKWPlJFTKNyifE0q++g632LvgUXS08VPeo5J5GxsRrsucuE4FLY4raIbNNrcuXDe8xzhYNJWqut9RUOrIOSa9qI1dpq539SkpqOlnrbLNT00e3K5W4blEzhydJ2U1bS1SuSmnZKreKNXOD0nnip4llme1jE4ucuEO8ViK7PFyZ8ls0ZJj+XJm1TYbpSU756ilVkbN7nbbVx3KRpf9Q3OhnslTFDVRPe5qYajt670KAZclYrPJ9Foc+TNSZyRtIADm2gAAAAAAAL9oj0M/2rvghYiu6I9DP9q74IWI3U8sPj9Z69/kABdmAAAAAAAAAAAAAAAAAAAAAAAACs669Ew+3T5XFmKzrr0TD7dPlcUv5ZadF69flRQAYX17TdPKi2KjwqL+zRCv68ick1JLs+bhzc9e46NEXBH077e9cOjVXs60Xj3L8SbvFsjutC6neuy7ix+M7KmzbjpyfMRbw2smbdN/8A7ZeW3QapytXnob+pW66gqaCdYqqJzFRdy43O60U5jNWeC28vez466nDNaz1a/lOlBuUySCCaplSKCJ0j14NamVNG09avJdvRj8ctIu1IqdPQaaZJt9nz+r0VdPHn3n22/wCXzqpzW6fqcqiZRETPPvQhNBfva37rP1OnXFW1tJDSJhXSO216kQ59Bfva37rP1KzP+pDRjpNez7TP3n/0sF/rn261S1EX7xMNavQq7smazTzVD1fPK+Ry8VcuVL/rL0BJ99vxM8KZ5nfZq7Ix17qbbc90xpWBJ79BtN2msy9d/DCbl78GiSo9YnpEqI/C7Ku4Z5sme6Sm5G/worka2RHMXPPu3J3ohob1cjFViIrkTcirjJ0w+Vj7W37+N/ZTJNHVsj3SSVsTnuXKuVFVVU+U0XV8Uq4u5TrfrRI3uY+3Pa5q4VFk3ovcfP8Abdn2B3/k/wAiv+k7RbtDblHL+y0UbJo6WJlS9HytaiOcnBV6Sk6wpkS+x7Koiztbndw34O9dao3Gbe5MplMyf5EHebylzr4KlIFj5JETZ2s5wuScl6zG0K6LTZ8ebjtG0c/ZolNE2CmjiaiI1jURERMJwKBqq4vrLrLCj15GBdhrebKcV79xoMEiSwMkTg5qKZ3qihdR3mZ2yvJzLyjV6c8fz/QnNvw8nPsvhnUTxdUOWrRNfI2qfQuVXRubtt/wqhVSz6JopXVz6xWqkTGq1FxuVVOGLfijZ63aHB4e3EtV99CVvsXfAy41G++hK32LvgZcdM/WGPsfyW+Vq0H/AM3V/cb8VJzV3q7UdrPmQg9B/wDN1f3G/FSc1d6u1Haz5kL09Nm1P/z4+YZyADI+iAAEgAAAAAAAL9oj0M/2rvghYiu6I9DP9q74IWI3U8sPj9Z69/kABdmAAAAAAAAAAAAAAAAAAAAAAAACs669Ew+3T5XFmKzrr0TD7dPlcUv5ZadF69flRQAYX2D2paiWkqWVELtl7FyholmvlLdI0Rq8nOiedG7j7ukzU+mPdG9HxuVrmrlFRcKinSmSasWs0VNRG/SWszQQ1DFZNG2Rq8zkycfkO1fYYP5SmUmqrnTo1sj2ztT66b8dqHf/AG2n+xR/zr/Q797Serx/p+qpO1f8SttNR01I1W00DI0/wtRDnut1prZTukmeivx5saLvcVCq1fcZkVIEjgRU4om0qd5AzTS1EiyTyOkevFzlypFs0R5XXD2VktbizTye1fWzXCskqZ18968E4InMiFl0F+9rfus/UqJ32u7VVqdI6lSNVkxnbRV4f7nGltrby9TVYJvp5xY4XTWXoCT77fiZ4S1x1DXXGlWmqEi2FVF81qou73kSMtotO8K9n4L4MXDf3fcUj4ZWSxuVr2LlFNJsl4gutKjmLszNTEkarvRf6GZnrT1E1LM2anldG9vBWqMd+E1ujjUV/rDRLlp633F6ySRujlXi+NcKv6HLT6QtkMiPes0yJ/C9yY/JEISm1lXRM2Z4Y5lTg76Knq/WtSrFRtJG1eZVeqnbjxzzeXGl11Y4Ynl8rLdaC3TUTvHY2NjY3c/grE6lM1nSJJ3pA5zokcuwrkwqodVyu1bc3ItVLlqcGNTDUOE5ZLxaeT0tDpb4Kzxzvv8AZdtH3hktOlvqHokkf7pV/ib0dqFhrKKmrouSqomyM6+bsMpa5zHI5qqjkXKKi8CeodWXCljSOZG1DWphFfud385emWNtrMer7Nvx95hWVulbQ2Ta5BypzNWR2CWiZDTsZDE1rGomGtTcU2TWlU5ipHSxNcvBVcq4IqO/XBlw8ddLykuFaiP+iiLjgnNwLd7SvRx+n6rLH+pP+V9vvoSt9i74GXk3U6ouNVTSU8qQ7EjVa7DVRcL7yEOeW8Wnk9Ds7TXwVmL/AHWDRtY2muywvVqNnbsoq/WTh+pfJooqiF0UzGvjcmFa5NymRoqouU5iZpdUXWmiSPlWyonBZUyveTjyxEbS467s++XJ3mOeaevun7ZSWmoqYIFbIxMou27dv6MlIJmt1LcK2lkppkh5ORMLstXPxIYpkmsz/Fr0OLNjpMZZ3kABzbQAAAAAAAF+0R6Gf7V3wQsRXdEehn+1d8ELEbqeWHx+s9e/yAAuzAAAAAAAAAAAAAAAAAAAAAAAABWddeiYfbp8rizFZ116Jh9unyuKX8stOi9evyooAML7APbxWo+zy/yKeJrkSJyTNycEOuPHxsGt1k6bh2jfdlPitT9nl/kU+XwTRtzJE9qdLmqhreE6EPl0bHphzWqnWh07j+rBHbM/en+WRA0O8aapK6Jz4GNgqN6o5qYRy9aFBqqaWkqHwTsVkjFwqKcr45o9LS63HqI5cpeQLhoWNkkNZtsa7Dm4ymek99bxRstUKsY1q8unBMfwuJ7v+PE5W1+2o7jh+6kAA5PRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAX7RHoZ/tXfBCxFd0R6Gf7V3wQsRup5YfH6z17/IAC7MAAAAAAAAAAAAAAAAAAAAAAAAFZ116Jh9unyuLMVnXXomH26fK4pfyy06L16/KigAwvsA12L90zsQyI12L90zsQ04Pu8Ltn/w/upWqLpX0t5fFT1T42Ixq7LenBGQ6iu0L0clW56c7Xoiop76x9PyfcaQjUVzka1FVVXCIiZypzvaYtOzbpsOK2Cs2rHRqFnuDbnbo6lE2XLue1OZSt65o2tfT1rGoiuzG9eleKfqTmmaGWgtDI50xI5Verfq55iK13OxKWmp/43PV/YiJj9fyO9+ePm8fS/x1m2PpvP6fOgv3VZ95v6nRrr0TD7dPlcc+gv3VZ95v6nRrr0TD7dPlcRHpOuT/AHD+8KKfrWq52GoqrzIiZCIrlRrUVVVcIic5oGnLCy3QtnqGtdVOTev1E6EOFKTeXsavV109d56yqtPpq7zo1yUqxtXnkciY93H8jzqrBdKRjny0jlYn8TFR3v3GjVNXT0jNqpmZG3/EuDyprnQ1jlbT1UUi9CLvO3c16bvJjtTUebh5f3ZlBR1VSiup6aWVEXCqxirgT0VVTMR9RTTRNVcIr2KiZNSgpYKd8j4Y2sWRcuwnFSv669GQe2T5VK2wxWu7vh7UtlyxSI5Sox+tRXORGoqqvBE5w1rnuRrUVXOXCIicTQtP2CK2wpLO1r6pyec7js9SHOlJvLdq9XXTV3nqqNPp27VDGvZRua13O9yN/JVyfs+nLvA1znUjntbzscjs+7iaJNUQU6Is0rI0XhtORBDU09Qn7GZkmPquRTt3NXkfVdR14Y2/uyd7HRvVj2q1yLvRUwqHyaTfLNTXKmermtZO1Mtk507eozh7Fje5jsZauFON6cMvX0mrrqa79Jh8khS2S51bNuCjkVuOLsNz2Zxks2lrBFHTsrqtiPlkTLGuTcxOntLDVVlNRMR1TMyJq8NpcZOlcPLezFqO1Ji/BhjeVAfpi8t//U2kxzSN/qRUsMsEismjfG9OLXJhTTKe9W2plSOGrjc9y4RucZPq6WumudO6KdiZVPNeib2qTOGJj+MudO1MtLbZq7MuB711LJRVktNL9ON2F6+hTwM8xtye3W0WiJjoAAhYAAAAAAABftEehn+1d8ELEV3RHoZ/tXfBCxG6nlh8frPXv8gALswAAAAAAAAAAAAAAAAAAAAAAAAVnXXomH26fK4sxWddeiYfbp8ril/LLTovXr8qKADC+wDXYv3TOxDIjXYv3TOxDTg+7wu2f/D+7nnt9FUSLJUUkEj+G0+NFU/YbdRU79uCkgjf9ZkaIpWtRX+vt92fT0z2JGjUVMtyRTtV3ZzVTlY0zzoxNxectYnaWXH2fqMlItE8p/qvdbW09DTunqpEYxN2/nXoQza8XF9zr31Dtzfosb0NPCqq6msk5SqmfI7/ABLw93MeBwyZOLlD1tFoI0/8rTvZctBfuqz7zf1OjXXomH26fK459Bfuqz7zf1OjXXomH26fK47R6Tzcn+4f3hW9L07ai+07X4VG5fhUznBolTMymppZ5M7MTFcuOhEyZ/pKRsd/h21xtI5qduC+18C1VBUQI7ZWWNzEXjjKYIw+U7V56iInpszGvrZq+qfUTuVVcq4RVyjU6EOdj3RvR7HK1zVyiouFQ/ZGPjkcyRqtc1cKipvQ+TNMzu9+laxWIiOTSNNXJ9ztqPmVFmjXZfjdnrODXXoyD2yfBT10ZSPp7Ssr0VFnftIi9HA8tdei4PbJ8qmuZnu+b5yla110RTpugNJQMnv0SvTPJtV6J1/6Uv8AW1DaSjlqHJlImK7HYUTRj2tvqI5UTajciZ513F2usD6m11MMeNt8bkTPTgjF5F+0+epiLdOTMqyrnrah89RI57nLuyucdSHzTVE1LO2ankcyRi5RUU83Ncxyte1WuauFReY/DNvO76CKU4OHbklrnqCvuLeTfJyUWN7I92e1f0OW00qVl0pqdyIrXvTaRVxlOK/keE9NPTPRs8T41XeiOTGTs0/M2C+Uj35xymzu60x+pO8zaN3C1KY8Fu6j7NORMNREKVdNP3m4V0lRK+FyKuGptr5reZE3F15slen1dRU9Q+GSmqkcxytXzW83vNd4rMc3zmkvmraZxRvKBTSN1RUVOQT/AO6/0LlaI6yK3xx17mumZuVW78pzEP8A20t//Yqv5W/1H9tLfj9xVfyt/qUrwV6S06jxeeIi9P8ADi11TNSWmqmtwrkVjlz70/UqRYNSX6nu0EMVPFK3YdtOV6InN1KpXzhkmJtyexoK3pgit42kABzbQAAAAAAAF+0R6Gf7V3wQsRXdEehn+1d8ELEbqeWHx+s9e/yAAuzAAAAAAAAAAAAAAAAAAAAAAAABWddeiYfbp8rizFZ116Jh9unyuKX8stOi9evyooAML7ANdi/dM7EMiLQ3WlS1qJ4pFuTH0lO+K8V33eV2lpsmfh4I6buTWPp+T7jfgQR2XW4Puda6qkYjHKiJhFzwOM5XmJtMt2mpNMVa26xAACruuegv3VZ95v6nvrr0TD7dPlcVuy3yWztlbHCyTlFRV2lxjB93nUE12pWQSQMjRr0flqqvMqfqaIvHBwvFvo8s6zvYjluiqed9NURzxLh8bkchp1quMNzo2TwqmcYe3navQZadVBcKq3TcrSSqxVxtJxRydZTHk4erVrtF4iu8dYX+6aeoLnJysrXxy8741wq9vMclLpC3QSpJI6WfH8L1TZ/JCPg1qqRolRR7T+ljsIp8VWtJXMxS0rWOX+J7snabY+ry66fXRHBG+3yuTVYnmMx5vMnMVvXXoyD2yfKpA2zUlVQLO5zEnfM/bc57t+T4vOoJrvTshkgZGjH7SK1VXO5U/Ui2Ws12dMHZ+bFnraekI2kqZKOqjqIVw+N20nQvUadbK+C40bZ4HIudzm87V6FMrOqgr6m3zpLSyuYvOmdzu1Oc5Y8nD1ehrtFGojevmhfrlp233KXlZGPjlXi+NcZ7U4Hxb9MW2hk5TYfM9Fyiyqi7PYmMERT61c1mKij2ndLHYP2bW2WfsKLDv8b9x248fV5XhtdEcHPb5WC8+Itt8jrgxrokTgvFV6uszJzm8qrokc1uctRV3p7zpuNyq7lMklXJtbP0WpuRvYchxyXi08nraHSTp6TFp5y0nT12bc6FqucnLxoiSJzqvT7z5u2naK5vWVUdFOv/AFGc/anOZ5Tzy007ZoJHMkYuWuTmLLSaznjajaunbKqJ9Jq4VfcdK5a2jazBm7PzYsnHp5dUeiYmyIs1a97OdGsRq9+VJiaw2t9ElM6nayNqLsuT6TevJDrraLG6hfn76ELdNSV1xjWJVbDC5MOYz+LtUnix1jkrGn12a0cc7bf9+yOrooYKyWKnlWWNjsI/GMnOAZpe9WJiIiZ3AAQsAAAAAAAAv2iPQz/au+CFiK7oj0M/2rvghYjdTyw+P1nr3+QAF2YAAAAAAAAAAAAAAAAAAAAAAAAKzrr0TD7dPlcWYrOuvRMPt0+VxS/llp0Xr1+VFABhfYALja9K0NZbaepklnR8jEcqNcmPgdf9jLd/3an+ZP6HaMNpjd5tu1MFZms7qGC+f2Mt3/dqf5k/oP7GW7/u1P8AMn9B3Flfq2D+qhgudw0pQUtvqKiOWdXRRuciK5MZRM9BTClqTXq16bVU1ETNPsAAo0gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAv2iPQz/AGrvghYiu6I9DP8Aau+CFiN1PLD4/Wevf5AAXZgAAAAAAAAAAAAAAAAAAAAAAAArOuvRMPt0+VxZis669Ew+3T5XFL+WWnRevX5UUAGF9gtFu1a2ioIaZaJX8k1G7XKYz+R3UmsW1NZDB4kreVkazPKZxlcdBSTrtPpei9uz5kO1ctt4h5ufs/Bw2vtz5z92qc2Sr1ur20tbNTrRK7knq3PKYzj3Fo5jLr36arPbO+J2y2mscnk9nafHnyTF435Jyu1e2qop6bxJW8rG5m1ymcZTHQVZEVy4aiqq8ERD0poJKqpjgharnyO2UQ0SzWGltkTV2UkqFTzpF/ToOMRbJ1epkyYNBXakc5+yjQWS6VC4iopeGcuTZTvU8ai211MirPSTMRFxlWrjPaajLPDAiLNKyNF3Zc5EPpFZIzLVa5qpzb8nTuI92KO18u+81jZkQLlqXTbXMdW29iNc1MyRJwVOlOsppwvSaztL2NNqaainFUABRpAAAAAAAAAAAAAAAAAAAAAAAAAAAAAF+0R6Gf7V3wQsRXdEehn+1d8ELEbqeWHx+s9e/wAgALswAAAAAAAAAAAAAAAAAAAAAAAAVnXXomH26fK4sxWddeiYfbp8ril/LLTovXr8qKADC+wDrtPpei9uz5kOQ67T6Xovbs+ZC1esOWf0rfEtU5jLr36arPbO+JqPMZde/TVZ7Z3xNGfpDwux/Vt8J3Q1Ij6iesciKrE2G9WeJY75cfJltfUNwr/osRV4qv8Ar8iE0HI3kKqPPno5HY6sHbrOmfPZdtm/kZEeqY5t6fqTTlj5KamIvreG/TeFEqaiaqnfNUSOfI9cqqnXabtU2ypa+KRyxZ8+NV3OTs6SPPpjHSPaxiKrnLhETnM0TO+76C+LHNOGY5NbjeksTXpwcmTM7/Sto71UwsTDNrabuwiIu/Cd+DSKSNYqSKNeLWIi57Cg6vm5W/ytxjkmtZ27s/qac3leD2VMxnmI6bIQAGR9GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL9oj0M/wBq74IWIruiPQz/AGrvghYjdTyw+P1nr3+QAF2YAAAAAAAAAAAAAAAAAAAAAAAAKzrr0TD7dPlcWYrOuvRMPt0+VxS/llp0Xr1+VFABhfYB12n0vRe3Z8yHIe1JN4tWQTq3aSKRr8dOFyTXlMOeWJtSYj2azzGXXv01We2d8Syf22ZjHiLv/J/kVSuqPG62aoRuzyr1djOcZO+W9bRyeT2bpcuHJM3jaNnbp+5+S7k2R+VhemzIidHT/rrNHR0VTAipsyRSN7UVDJCWtF/q7WnJsxJBnPJu5uzoIxZOHlLrr9BOae8x+ZY6zRtJLMr6ad8DV4sxtInYddn03SWyXl1cs8/BrnJhG9iHHFrSjViLLTTtd0Nw5O/KHlU60hRmKSle5ypxkVERO7J03xxzefNNfeO7nfb/AL91gulwhttG+omcm7c1ufpL0GYTyvnmfNK7afI5XOXrU97jcaq5T8rVSK7H0W8zew5DjkycXR6uh0fh6726yAA5PQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAF+0R6Gf7V3wQsRXdEehn+1d8ELEbqeWHx+s9e/wAgALswAAAAAAAAAAAAAAAAAAAAAAAAVnXXomH26fK4sxWddeiYfbp8ril/LLTovXr8qKADC+wATNm0/JdqZ80dQyNGP2VRzc8yL+p63XTNRbaJ1U6dkjWqm0iJjCdJfgttuzTrMMX7ubc0CACjQAsVDpOprKOKp8YZGkrdpGq3O5eBGXi1yWmrbBJI2RXM2kVEx/rgXmlojeWemqw3vwVtzcAB7UdOtVVxU7V2VlejUXGcZK9Xe0xWN56Q8QWr+xVR9si/kUrlbTpSVktOkiSck7ZVyJhFXnLWpavOXHFqsWadqTvLwABRoAAAAAAAAAT1q0zNcqFlUypYxrlVMK1V4Lg5L1ZpLQ+JskzZOURVTZTGMY/qXmltt2euqxWyd3E80YACjQAAAAAAAAAAAAAAAAv2iPQz/au+CFiK7oj0M/2rvghYjdTyw+P1nr3+QAF2YAAAAAAAAAAAAAAAAAAAAAAAAKzrr0TD7dPlcWYrOuvRMPt0+VxS/llp0Xr1+VFABhfYLLoeq5K4zU6qmJmIqbudv+SqXC6UqVttqKfdmRio3PBF5l7zN7RU+KXWnmzhGvRF343LuNSRctz0mvDO9dnzfalJx54yR9//AMZBw3Ke1JAtTVRQNyiyPRuUTOM851X6mWlvNTHhcK9XJnoXed2jqZJ7016plIWK7jwXgZ4r/LZ7WTPEaeckey/xMbFEyNiI1rUREROZCta5pVkoIalqKqwvwvUjv80QsskjY2or3I1FVGpnpVcIcl4pkrLVUQYyrmLjdnfzGy8b1mHy+myTjzVv/VlpYNGUqzXnl1RdmBirnrXcidyr3FfVFRcKnAvOh6dI7dLUKiZlfjPPhP8ASmXFG9n0faOTg087ffksFZMlNSSzrvSNiuxnGcGUSPdJI6R6qrnKrlVedTQNY1PIWRzEdhZnIxN2c86/khnzGue9rGNVznLhETiql887zsy9kY4rjtkn7vwFutujttjZLjM5qqmeTj4p2qTCaWs2P+UX/wAr/wCpWMNpdsnauCk7RvPwzkFzuOjY1a59vmc13FI3707EXm/MqNTTy0tQ+CdiskYuFRSlqTXq06fV4s/knm8gdVtpmVdxgp5FcjJHo1VbxLh/Yu34/f1P8zf6E1xzaN4V1Gtx4LRW6igtFq0mtUizVcro4VVdhrcbSpzKcuqbZS2yemjpGK1HMVXKrlXK9InHMRvJTW4r5YxV5ys2jvV+H7zvipD69/f0f3X/AKExo71fh+874qQ+vf39H91/6He3pvI0/wDuE/MqmDqttBLcq1lNDxdvVy8Gp0lvTRdAiJtVFTnn85v9DhXHNucPY1GtxYJ4bdVGB23aGjp618NBJJJGzcr3uRcr1YRDiKTG07NFL8dYt7gAIXAAAAAAAAAABftEehn+1d8ELEV3RHoZ/tXfBCxG6nlh8frPXv8AIAC7MAAAAAAAAAAAAAAAAAAAAAAAAFZ116Jh9unyuLMVnXXomH26fK4pfyy06L16/KigAwvsA1Cx1fjtopp1VVc5mHKqfxJuX80MvLroWp2qSelVU8x201OfC/7HfBO1tnldrYuLDF/Zw65puTr4KhETErFRe1P90JHQ9KsdvmqXIqcs/DetE5+9V7jp1jSLUWZZGoquhejkRG5VU4Kn559xJWimSjtdPBhPMYmcJjfznWKf6m7zb6nfRVx/ffb9IPWdctOlHHG7D0k5Xhw2eBZIJWz07JW8HtRU96GfasqvGb5K1Fy2FEYm/O/n/wBdRatI1SVFkjaqoroVVi7uHR+SoRS+95hOo03BpaX+/wD7Um9Uvid3qYMIiNeqtROhd6fkpodkp1pbPSwuRyOSNFVHJhUVd6oQepbX41fbe7GWzO5N6ZwmEXPwyWlVRrd/BCcddrTKNZqe9w46/wDfZR9cVSS3GGmbhUhYqqqLzu5u5E7zu0ZamNp/KMrEV7lVIlXfhOCr8SsXip8butTPlVRz1xno4IaHYmtZZKJGIiIsLVwnSqZUpT+V5lp1czg0lMcffqXe7U9pp0lnXLnLhjE4uKy7WtRtLs0ceM7suU5daTPkvXJuXzY2IjU7d5XyuTLMW2h10XZ+K2KL3jeZaZZr1T3eJyxorJGfSYu/Bxattbay3rUxsTl4EzlE3ubzp+pVtLSPj1BTcnldpVa5E50wv+/uNGnjbLA+N/0XtVF7DrWe8rzYdRj8HqImnTqzOw+nKP2qGoIZhZERL/SonNMhp3N7iuDo6drzvlr8I26Xuitao2oeqyOTKRsTK46Smalu0F2nhkp2vajGqi7aInORtwmfPXzyyuVz3SLlVOc53yzbk9HR9n0w7X3/AJNE0f6vw/ed8VInXMb5auhjjarnuRyNROKqqoS2j/V+H7zvipJvpoZK2OoeiLLG1UZnmRcZU78PFSIePObudXa/tMuKwWhtpo9ldl0798j0T8uwitW3zkGvt1Mq8o5P2jkX6KLzdpN3upqKW1TzUsbnyo3dj+Hr9xmL3uke58jlc5y5VV5ymS3BHDDToMHick5snPZ8gAyvoAAAAAEgAAAAAAAL9oj0M/2rvghYiu6I9DP9q74IWI3U8sPj9Z69/kABdmAAAAAAAAAAAAAAAAAAAAAAAACs669Ew+3T5XFmKzrr0TD7dPlcUv5ZadF69flRQAYX2ATmkarxe9xsc5UbM1WLvwmeKf095BnpBK6CojmZjajcjm56UXJas7TEuOox95itT3axNGyaJ0ciZa5MKh+VErYKaSZ/0Y2q5cdSHnDWU8sLJGysw9qKmVTJEasroo7LJEyRjnTKjURFz1m2bREbvksWG18kU/qoUsj5pnyyLtPkcrnL0qvEsuhqvk62elcu6VqObledOrsX8irndZapaS700yLuR6IuOhdxjpba276nVYYvgtSGnujY57XuY1XM+iqpw7DjvVV4naKmfdlrMJlOddyfmp0+Mwf96P8AmQrGtq5i0cFNFIi7b9t+y7mThnq3/ka722rMvmdNhtky1rMKYaJpOtSqssbHOzJB+zXs5vy+BnZIWa6zWmr5aNEcx257F/iQy478Nub6LX6ac+LavWFs1TYpLi1tVS75427Ks+sn9SlOoqtk6QOpZklXejOTXK+40q3XaiuMSPp5kzzsduc1etDt3dR3tjred3j4Nfm01e7tHRU9KWGenqEr6xixuan7Ji8UynFfdzE9fKptHaaiVy79hWp1qu49ay4UlDEslTOxiJzZ3r7jP77epbvUIuFZAz6DM/mvWLTXHXaE4ceXW5u8v0/7yeVh9OUftUNPX6PuMvsao29UiuVERJE3qaWtTBs/vo/5kIwdHTtes97Xb2ZVVf8ANTffX4nketTvqplT67vieRmnq9+nlhomj/V+H7zvipxapuE1sudBUwYVUa9HNXg5N246dIzRMsMTXyMau07crutSJ1zIySaj2Htdhr+C56DVM7Y94fO4sfHrZi0cpmVsoauG40TJ4lRzJE3p0dKKUjU9jW3T+MUzF8Vk6P4F6Ow59PXl9qqsOTagkVEe3o60L9M+jq6Z0ckkbo5G4Xzk4KN4yV/qma5NBn3jnWWVcdyE5FSMp5paWNlOs8UKyTyzt2kZw3I3huzxwpx3i3+TK9YmyJLEvnMcnOnQvWSUlVyVdVXJkbpYauBWtVrUcjXLjKOz0YONY2nm9PUZJyViadJ/4/5eTqVtTLFRzxU7Z5YtunmgbsI7j9JOvHQQRPpLHV18FylZJHBTMasjVajWoreCM6crzEAu9ckXX0k25xP/AGQAHNtAAAAAAAAX7RHoZ/tXfBCxFd0R6Gf7V3wQsRup5YfH6z17/IAC7MAAAAAAAAAAAAAAAAAAAAAAAAFZ116Jh9unyuLMVnXXomH26fK4pfyy06L16/KigAwvsAAAAASjaAAEJAASjaAAEJfrXOa5HNVWqnBUXB7pW1aMViVMuyvNtqc4J32VmlZ6w+nve9209znL0uXJ8gBMREdAAA2AAQkABKNgAA2D2gqqimzyEz49pMLsrjJ4gImsTG0w9p6qoqdnl5nyI3gjl4HiAOpFYrG0QAAhYAAAAAAABftEehn+1d8ELEV3RHoZ/tXfBCxG6nlh8frPXv8AIAC7MAAAAAAAAAAAAAAAAAAAAAAAAFY12qNtECuVE/bpx+64s5UPCZ6vU/4tvyPEV4/4umLJ3V4v7KZyjPrt7xyjPrt7yEBbwEe70/rdvwTfKM+u3vHKM+u3vIQDwEe59bt+Cb5Rn12945Rn1295CAeAj3PrdvwTfKM+u3vHKM+u3vIQDwEe59bt+Cb5Rn12945Rn1295CAeAj3PrdvwTfKM+u3vHKM+u3vIQDwEe59bt+Cb5Rn12945Rn1295CAeAj3PrdvwTfKM+u3vHKM+u3vIQDwEe59bt+Cb5Rn12945Rn1295CAeAj3PrdvwTfKM+u3vHKM+u3vIQDwEe59bt+Cb5Rn12945Rn1295CAeAj3PrdvwTfKM+u3vHKM+u3vIQDwEe59bt+Cb5Rn12945Rn1295CAeAj3PrdvwTfKM+u3vHKM+u3vIQDwEe59bt+Cb5Rn12945Rn1295CAeAj3PrdvwTfKM+u3vHKM+u3vIQDwEe59bt+Cb5Rn12945Rn1295CAeAj3PrdvwTfKM+u3vHKM+u3vIQDwEe59bt+DWtDqi2V6oqKnLO4diFjKn4OPVt/4h3waWwrNeH+LzMuTvbzf3AAHMAAAAAAAAAAAAAAAAAAAAAAAAKh4TPV6n/FN+R5byoeEz1ep/xTfkeXx+aET0ZiADe5AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADUfBv6tv/EO+DS2FT8G/q2/8Q74NLYYMnml1joAAokAAAAAAAAAAAAAAAAAAAAAAAAKh4TPV6n/ABTfkeW8qHhM9Xqf8U35Hl8fmhE9GYgA3uQATWkrU2736GGVMwR/tJE+sic3vXHuyRado3T1SWl9GyXWJKyue6GlX6CN+lJv49SF+obBaKBrEprfAjmLlJHMRz0X7y7z0utwp7Na5KuZMRxNw1jUxleCIhlFz1LdbjUulfVyxMVV2Y4nq1rU93Eyxx5Z/ovyhrlTb6Gsx41R08+OHKRo7HZkqN90DTyRrLZl5GRN/Ivcqtd1Iq70Uo9Ld7lSPa+nrqhitXcm2qp3LuLrQ+ECFloV9dEslc1ytRkaYR6Y3OVeCJzc/YT3d6c4RvEs/likhlfFKxzJGOVrmuTCoqHydl2uMt1uEtZMyNj5F3oxMJ/muNxIWXSd0vDOViY2GDmkmXCL2JxX4Gji2jeyuyDBfHeDZ6NVWXZquxuRafCKv8xWL1p642RyeORtdG7c2WNcsX383vIrkradokmJRQOu1W6a7XCOip3RtkkzhXqqJuTPN2Evc9GXS20zZ5H08209I2shc5zlVeG7ZQmbxE7SbSrp+ta570Yxquc5cIiJlVVeotK6Gr4LVU11dPFAsMTpEiam25cIq4VeCcOvifOm9KV9wZSXSGWmbAkqO2XudtYa7fzY5ukjvK7b7m0uKfSl3pbdNXVcLIIokyqOeiuVF6ET/IhDbL/Qy3KyVVFA5jZJmojVeuETei7zML5pWvsdGyqq5aZ7HyJGiROcq5VFXnROgpjy8XVMxsuvg/pKNunYqmOOJaiRz0lfhFduduTPMmERcdeSoa7pKSj1ArKONkTXRNc5jEwiLv4Jw5j20par9V0ctVZrhHTR8osbmve5MqiIucbKpzoRdwtFdFqBttqp2S1cz2M5RXq5FV2ETKqmSKxEXmdyejq0hYEvtxekyqlLAiOlVF3rng334XuNRo7Zb7exG0lHBD5qNy1iIrkTpXivvIzR9jqLFb5oKt0L5ZJdvaiVV3YRN+UTr7zg1fpu6X2uifS1MDKaOPHJyvcnn5XK4RF5sHK9uO3XktEbQh9MUdHV65unjUbJVifK+Njm5TPKYz7s/n1Ev4RaOjWyJVPZG2pZI1sbtyOcmfo9KpvVcFJtNouE9/koKKojhq6dz05Tbc1E2VwuFRM/kd+q7TfKSCGqvNfHUtV3JsRr3LhcKvBUROY6TH845o35KyD6hiknlbFCxz5HLhrWplVLbbfB/capiSVs8dI1zco3CvfnrTcid52teK9VYiZVAF1rPB1WRw7VHXRTvTOWPZyeexcrv7io1tHUUFU+mq4nRysXDmr/AK3oK3rboTEw8AERVVEaiqqruROcttq0DcqyNJayVlGxyZa1U23925E789QteK9SIlUjUNF2q21Ol6Sapt9JNK5X5fJC1zlw92MqqdBB1/g7rYYVfRVsVS5EVVY5ixqvZxyvbgtmi4JabTFLDPG6ORjpEc1yYVPPccMt4tXlK1Y2lnGr4IabU9bDTxMijarcMY1GonmIvBCGJ3W3rbX9rPkaQR3p5YVkABZDUfBv6tv/ABDvg0thU/Bv6tv/ABDvg0thgyeaXWOgACiQAAAAAAAAAAAAAAAAAAAAAAAAqHhM9Xqf8U35HlvKh4TPV6n/ABTfkeXx+aET0ZiADe5Bd/Bgn9/rlz/0m/EpBbPB1Wspr6+nkVE8Zj2WqufpJvx3ZOeWP4StHVLeE+V6U1vhRypG973Ob0qiJhfzXvM9NZ1xaHXSyq+FuZ6VVkYmN7kx5yJ+S+4yZUVFwqFcExw7FuoASdNYLnVWl9yp6dXwMds4TO0qc7kTnTmOszEdVXRpG0NvF7jimaq08ScpLjnROCe9fyNL1Be6ewW5J5Gbb3LsRRIuNpf0Qp/gy826VrXbl5FNy9pd7p5JRsa3fxLZyvJ+NbOM8+Noy5Z3vtLpXoobPCLc0mRZKOkdFne1qOR2O3K/AvFJUUOpLIkixpJT1DVa+N3Fq86Ljgv+5x7ej/8A4TuiOmmumnqSLk6WutsMec7McrGpnsRSttp8sbEKLp6gW2eEFlHlVSJ70aq86bK4/I0yfkWxrLPsoyLz9p38OOfuKM2pgq/ChDNSzRzRrHhHxuRyLiNedCZ1/K+LS8yMXCPe1rutM/5E33taCOSLv2t7bPRVlBTRzS8rE+NJUREblUVOffgi9L6vdbqWktSUSSIsuzynK4+k7ox1lPOq1elaP27PmQ791WK7K782y3qvW12morkj5RYW52M4zvROPvM11Jq11+t8dI6iSDYlSTaSTazhFTGMJ0l91j6q1/3E+ZDHTngrExvKbS07wZ+r1R+Ld8jCt6uqfEtcpVozb5B0UmznG1s4XGSyeDP1eqPxbvkYVPXvrTUfdZ8BSN8kk9Gg6Yvi3+glqXU6QbEqx7KP2s7kXPBOkj9T6udYrkykbRJPtRJJtLJs8VVMYwvQeHgz9BVP4lflaQHhK9YofwrfmcVrSJybJmeT60RUeN61mqlbscs2WTZznGVzj8yc8JvoSl/Ep8riueDv1nT2L/0LH4TfQlL+JT5XFrerCI6PHwc2hsdI+6zNTblVWRZxuam5V7/gdOqdZ+SKtaKhhjmnamXvkXzWL0YTeq47CQ0P6o0PY/53HrWLplKqRK7yT4xnz+WSPbz153nOZ3vO8bp+yt2XX8s9cyC6wQMjkcjUliy1GZ6cqu737iY1xZobjZZaprESppWrI1/S1N7kX3fme23o/wD+E7ojrnvtnWCREutEqq1cft29HaJn+UTWNj7c1N8HNmjqZ5rpUMa9sLuTiRUzh+5VX3Iqd/UWbU2qaewqyLklnqXptIxHYREzxVe88fB8+N+lomsVFcyR6PxzLnPwVCm6/jmZqqodLnYexixZXPm7KJu/+yKXiOPJMSjpCXofCLLy2LhQx8krlw6FyorU7F496dhfoJo54GTQuR0cjUc1U50UwY2LRzJo9LULahV29hVTK581VVW/lgZsdaxvBWd2da29ba/tZ8jSCJ3W3rbX9rPkaQRop5YVkABZDUfBv6tv/EO+DS2FT8G/q2/8Q74NLYYMnml1joAAokAAAAAAAAAAAAAAAAAAAAAAAAKh4TPV6n/FN+R5byoeEz1ep/xTfkeXx+aET0ZiADe5B9QyvgmZNE5WSRuRzXJxRU4KfIA13TOpaW808cbpEZWo39pGu5VxxVOlD1uelbPc3ulnptiVyfTiXZXt6F95jzHuY5HMcrXIuUVFwqE/Q6zvlE1rPGkqGNRURs7dr354r3mecMxO9ZXi3uu9FoayUj0e9k1SqLlOWfuT3JhFJe4XChstFylQ9kMTE8xjdyuxzNQzio17fJo9mN9PAufpRxZX/wDpVT8ivVVXU1s7pqueSaRy5Vz3Kv8AsRGK1p/lJxR9k3T6ofHqxby6BGxPXZdEz6i9vPz82V6DSKmntupLU1r1SemeqPa5q4Vq9PUu8xY7bbd7jan7VBVyQ54tTe1e1F3F74t+dURK6r4N4Vny26PSHa+gsKK7HRtZxn3EhcdH2GKzOY/+7cizPjSr5yL0u6d/N3YKwnhBvSIiLHRrhOKxu3/mQVzvNxurkWvqnyo3g3g1Pcm4rFMkzzlO8JTRTWN1jTNjftsRZEa7GNpNld+OYufhD9V3e2YZjQ1tTbqtlVRycnMzOy7ZRcZTHP1Kd1x1Hd7nSrTV1XysKqjtnk2N3+5C1sczaLQiJ5Io9qGVsFdTzPzsxytc7HQi5PEHZVuc0dNc7c6N6JLTVMfMv0mqm4zzV+lKGx2uKqpJqh73zJGqSOaqYVrl5kToIG23+62tix0Na+Ni/wACojmp2IuUT3H7c9QXW607YLhVctE1+2jeTa3DkRU5k61M9MVqzynkvMxML34M/V6o/Fu+RhU9e+tNR91nwOC2agutqp3QW+q5GJz9tW8m12XKiJzp1IclfXVNxqnVVZLykzkRFdsomcdheuOYvNkTPJongz9BVP4lflaQHhK9YofwrfmcQlsv91tMDoLfVcjG9225vJsdldyZ3p1IeFyudZdalKivm5WVrdhHbKN3IqrzJ1qRGOYvxEzy2Tvg79Z09i/9Cx+E30JS/iU+Vxn1uuNXa6rxmhl5KXZVu1so7cvbuOi53+6XaBsNwquWjY7banJtbhd6cyE2xzN+IieWyy+D/UEVKj7XWSIxj3bcT3OwiKvFCzag0pQ3x6zvc+CqxhJWb844ZReP5GRE5bdW3q3NbHHVctE1N0cybScOnj+ZW+Kd+KpE+62W7we0lPUtlrax1U1q5SNI9hF7d65QjdcWC0W6BKqllSmneuEpmplH9afV5zgn17fJY9mN1PCuc7UcWV//AKVUK5PPNUyrLUTSSyO4vkcrlX3qK0vvvaSZhaNB36O2VklHWSbFNUYVrl4Mfw9yKnwQvd7sNBfImNrGuRzPoSRrhzc/kYwTlr1ZeLZGkUVSksKJhscybSJ2LxTGOGcDJimZ4qkT7rpR6AtVPUNlllqJ0a7KMeqI1epcJlS0wvjfGnIuarEVWps8EwuMfkZRX61vdbCsXLR07VRUdyLMK7PWqqqe7ByUOp71b6RlLSVvJwszst5Ni4yuV3qmeKlJxXtzmU8UQ9tbettf2s+RpBHvXVlRcKuSqq5OUmkxtO2UTOExzdR4GmsbRsrIACUNR8G/q2/8Q74NLYVPwb+rb/xDvg0thgyeaXWOgACiQAAAAAAAAAAAAAAAAAAAAAAAAqHhM9Xqf8U35HlvKh4TPV6n/FN+R5fH5oRPRmIAN7kAAAAAAAAAAAAabpnRlHS0kdTc4UnqpGoqxvRFbHnmxzqUveKRzTEbsyBtqeSZZlpm+JPlXKLEmyruvcU/WWkYIaV9ytUaRJGmZoW8FT6ydHwx+dK5omdpTwqEDstFtnu9xioqZPOeu9ypuYicVU1a26fs9lpdrkYtprf2k82MrwyuV4JuLXyxTkRG7HQbX4tZrnE6NsdFUsRUyjEa7HcZ1rHTKWSZlRSq51HM7CbS5VjuOz1pu3EUzRadpJrsrILpovScVxhS5XJrlg2v2UXBH4516s836cburLNQI2nelDT4TzWO2W7upFItmiJ2girFAavqLSNDc6d8lJEynrE3te1MI9ehyfrxMqkY6KR0b0Vr2qqKi8yoXpki/RExs+Qd1ltk13ucVHAm965c7ma1OK/65zSbpbtPWK0OqJ7bTP5NuyxHtRXSO5kz0kWyRWdiI3ZQD6kfykj3qjW7TlXDURETPVwRD5OiAAAAAAAAAAAAABqPg39W3/iHfBpbCp+Df1bf+Id8GlsMGTzS6x0AAUSAAAAAAAAAAAAAAAAAAAAAAAAFQ8Jnq9T/AIpvyPLeVDwmer1P+Kb8jy+PzQiejMQAb3IAAAAAAAAAAAmqTVN2pbXJQMqXLG5mwxyr58af4V5t2U6ubBCjjuQiaxPVL1pOW8bh8WVUm202FTjtcxs15crdOVvLORHeKPRyqvPsr+pXdEaXSijbcrhH/eXp+yY5P3adPb8Dj17qSOSN1ooXbW/9vIi7vup09f8ArGe88doiq0coffgxpWcnW1ioiyZSNMpvROO5ev8AQ4vCNdZpLk22Me5sELUc9uMbT13+9MY/MmvBtIx1jmY1PPZMu1u6UTBVNfetlT91nyoK88s7k+VEWq4z2u4xVdM5UcxfOTO5yc7V6lNdv9My5adq4mbL0khV7FzuVU3ouU60Qxc2umY6PTUTHtVr20aI5F5lRhOeNpiYKspsmobhZXqlJLmJy5dE/e1evqUj6qpnrKmSpqZXSSyLlznc/wDro5jyLdovS/lKVtfXsXxNi+Yxf+qv9PidbcNf5KxvK6aP8a/szSeOOVz1auztcdnO78jLL85smoLg6NUc11TIrVRc585TStWaigslCtPA5FrJG4jY3/ppw2l6E6in6At8dffnT1HneLN5VEXndncvu4nHHy3vK0+y46LsXke18pM1UqqlEdJnPmpxRuOlMnBrSw3q8zsdSPifSxNyyDb2VV3Ou/dn38O0kdVamjsEUbGQ8vUzZVrVdhGonOvv5iL05rhbjXMorjTxxPlXEckars55kVF9+/PQUjj3408ujO6inmpZnQ1MT4pW8WPbhU9x5mmeEW1sntLbixn7anciOci8WKuN/TvVO8zM0478cbqTG0gALoAAAAAAAAAABqPg39W3/iHfBpbCp+Df1bf+Id8GlsMGTzS6x0AAUSAAAAAAAAAAAAAAAAAAAAAAAAFQ8Jnq9T/im/I8t5UPCZ6vU/4pvyPL4/NCJ6MxABvcgAAAAAAAAAADQ9GaR5BY7ndYv2v0oYXJ9H/E5OnoTm7TPDTW+EOzo1E8WrtyfUZ/7HLNxbbVWrs7tVTXt1OtJZaJ7lkTz50c1NlOhMrxKAukdQqqqtueq/fb/UuX/ESz/Zq7+Rn/ALD/AIiWf7NXfyM/9jjSb1jaIWnaUR4NLi2KrqLdI5EWZOUj61Tindv9yklrnTNTc5Yq+3RpJO1uxJHlEVycypnn3r7sGcwyyQTMmicrZI3I5rk5lTeaBaPCDTrEyO7QSMk3IssSZavWqcU92S96Wi3HVETG20oWw6MuNVXxOuNM6Cka7L9tcK9EXgmN6Z6S66zuLLfp2oy5ElnbyUaZwqqvFfcmVOOt17Zadv8AdlmqnK1VTYYrUReZFV2F7kUoF+vlVfK3l6hdmNuUjiRdzE/r0kRW+S29jeIjklNI6WkvEraura5lCxezlVTmTq6V/wBJol0lq6G27FooOXlRNiNjVRrWda8NydCFN01rK22mxU9DUQ1TpYldlY2NVq5cq87s85K/8RLP9mrv5Gf+xXJF7W6EbKjU6Z1NV1D6ipopZJZFy5zpGb/zJrQEUtt1BW2+tZyVQsSLsLhV5l4p1KhKf8RLP9mrv5Gf+xSb3efG9Sy3a3OlhVVYsauwjmqjUTfjPQXjivHDMbHKOa3+ECxVtxdT1lDE6dYmK17G8UTjlOnnIHS+lrjUXWCerpZaanhkR7nSNViqqb0REXf+hO2vwhUj4o47pBLHLuR0kaI5i9eOKdiIp2V2vrPTs/uvLVb1TKbLFY1F61dhe5FKxOSscOxy6vXX9VHBpiWFypt1D2samehUdn8vzMoJS/X2rvtU2Wp2WMYmGRt4NIs7YqTWuyJncAB0VAAAAAAAAAABqPg39W3/AIh3waWwqfg39W3/AIh3waWwwZPNLrHQABRIAAAAAAAAAAAAAAAAAAAAAAAAVDwlNc7T0Ktaqo2qarlROCbLkLefL2te1WvajmqmFRUyik1nad0SwQGn3vQtBWI6W3f3SZd+yn7tV7Ob3bjP7rZ6+0TcnXU7mIq+a9N7Hdi/pxNtMlbdHOYmHAADogAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABI2iyXC8zLHRQ5a36UjtzG9q/oX+zaFt9C5s1c7xuZq5RFTDE93P7znfJWvVMRMvvwdxvj02u2xzdqdzm5TGUwm/sLUfiIjURETCJzIfpitO87usAAIAAAAAAAAAAAAAAAAAAAAAAAAAAADznhiqInRTRskjd9Jrkyi+49ABR79oGGbans70hfxWB/0V7F5ufp9xRLhbqy2zLDW074XZXG0m5exeCm5nNW0VLX07oKyBk0bkwqOT4dC9Z2pmmOqs1YWC+Xrwfuar5rPNtJvXkJV3p1I7+pSKmmnpKh8FTE+KVi+cxyYVDVW9bdFJiYeQALIAAAAAA6bZQy3O4Q0UDmNklVUar1VE4Z/Q5ia0b610H31+VSLTtG6Y6v2HS9dNfZbO2WnSoiZtucrnbKpu6s8/QRlfRT2+tlpKpuzLE7DscF/wAjQrf/APk6v/D/AKMPnV1up7/TVFTQKi19ucscsaYy5vXz82U95xjLMTEStwqjcNM11vrqGkmlp3SVrkbGrHOVEVVRN+7rJT/h3ePtND/O/wD9SY1X6z6a9qz52kFr+aWPU8jWSvanJs3I5U5hF7W2iJRtCHvNjr7LM2OuiRGu+hI1ctd2L+m5T6uVjqrbb6KtnkhdHWMR8aMcqqiKiLv3dCoWiCqlu/g3rX16pLJSybMb147tlUVelfOVOw8NYeqWnfYN/wD82kxkneIk2QVh07XX7lvE3QsbDjadK5URc54YReg4blQT2y4TUVUjeVhXDtlcoud6KnuLvTTO0zoKGoa1W1FXKjudFXO/3ea04vCHTxzrQXiBUVlTEjVVF4/xIvTwVe5BXJM2/oTHJTAAdlQAAAAAAAAHtR0dTXVCQUcD5pV/hYmd36JvLvZPB+u02a8yps8eQjXj2r/Qra9a9UxEyplvttbcpkioqd8rsoi4TcnavBOJfrHoKmgaya7u5ebGeSauGN7edV/11lvpaWnpIUhpYY4Y04NY1EQiazV1goauSlq7lHHPE7ZexWuXC+5DLfNNui8VTEMMVPE2KGNkcbeDWphE9x6EXSagtFZJTR01dG99U1z4U3pyiNVUXGU6UXuPeS7UEV1itb6piVszVcyHiqoiKvu3IvE4rO0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOG52qhusPJV1OyVEzsux5zc9C8x3AROwzS/aDqqXantKrUxb1WJcbbU6un49SlPkjfFIscrHMe1cK1yYVF7DeyMu1it14j2ayBFfjdI3c9vvNFM8xysrNWKgtF60RcrdtS0v98gTfliYeidbe/hkq7kVrla5FRUXCoqcFNFbRbopMbAALICX0pPFTalopqiVkUTXrtPe5ERPNXnIgETG8bJaBQ3Kgb4RK2rfW07ad0GGyrImyq+buzw5iITUHkrWlZWU8nK0k0ypIjHZR7elOtOYqwKRjj7p3X3VNyoanUthnp6yCSKKZrpHNkRUYm21d683OdN8tunLzcnVs1/gjc5qNVrZmY3dpnII7rbbaTiW/UF7tlPZksdgRVhV2ZpcYR/v51VU3r1Hpe56G4WfTdG2tp8taxk68on7JNlqLtb93OUwE93EG7Rb1reO2VbKO0xU9TTxxtTb28pnoRUXmTB4Vd+pdSaSrWVs1NS1cTtuOJZMbWymUxniq707iggjuawcUgAOqoAAAP1rXPejWNVznLhERN6r1FpsWiK+4KyWuzSU64XennuTqTm7VK2tFeqYhV445JpGxxMc97lwjWplVLnY9A1E6Mnu71gYu/kWYV69q8ELtarHbrRHs0VO1rsYWRd719/vJIzXzzPKq8VcVttdFaqdIKGBsTededy9KrznaAcN91go/hAssU/k6ajtkckz65izvjgRXObhc7SomVTtLwAM01xZ69NRWxdPUbofFoHPjWCLDGORXOxuTGV6OdVPOy0N6m1/a71dKaZjqpsr3t2HI2nTYe1rVzw7Os08AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIK+aWtt5zJLGsNRj99HuVe1Of49ZOgmJmOgyG+6SuNnR02z4xSp/1Y0+j2pzEAb6Vu9aNtlza58LEpKheD4081e1vA0Uz/ayk19mTAlrxpy52d6+MwK6JF3TR72L/T3kSaImJjeFQAEoAAAAAAAAACYsmmrleZEWCLk4M+dNImGonV0qRMxEbynqhyxWXR1zurWzPZ4tTOwqSSJvcnU3iv5cecvFl0dbLXsyvb41UJ/HIm5FxzN4IWMz3z/itFfdC2PTVusrEdBHyk+MOmkTLvd0J2E0AZ5mZ5yuAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfLmtc1WuRHIvFFTiVK+6Foq5yz25yUk68W4/Zu93MvZ3FvBNbTWeSJjdiV1stwtEiNrqdzEX6L03td7yPN4qIIamF0NRGyWN6Ycx7covuKZefB/Ty7Utol5F/NFIqq33LxQ00zxPKys1Z0Dpr6Crt1QsFbTvhkTmcnHrReCocxoid+igAddttlddJ+RoKd8rufG5G9qruQTMRzkchIWqyXG7vxRU7nNRcLIu5iL2l3smgaenc2a7SpUPTfyTPoe9eK/kXOKNkMbY4mNYxiI1rWphGonMiGe+eI5VXiqrWPQ9BQI2WvRtXUJ9ZPMb2Jz8ef8i1Na1rUa1EaicEROB9AzWtNuq2wACEgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA56yipa6FYayCOaPoe3JRb7oB7VWayu2m88Ejt6fdX+poQLVvavRExuoFj8H6K1s15l3rwgjX4u/RO8u9HR01DCkNJAyGNP4WJg6ALXtbqRGwACqQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf/Z";
+
+function escapeHtml(v){
+  return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function fmtReportDate(dateStr){
+  if(!dateStr) return '';
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  const suffix = n => {
+    if(n%100>=11 && n%100<=13) return 'th';
+    return ({1:'st',2:'nd',3:'rd'}[n%10]) || 'th';
+  };
+  return `${d}${suffix(d)} ${dt.toLocaleDateString('en-IN',{month:'long'})} ${y}`;
+}
+function shiftShortLabel(shift){
+  return ({1:'1st',2:'2nd',3:'Night'}[shift]) || String(shift);
+}
+function n(v){
+  const num = Number.parseFloat(v);
+  return Number.isFinite(num) ? num : 0;
+}
+function fmtNum(v){
+  const num = n(v);
+  return Number.isInteger(num) ? String(num) : String(num).replace(/\.?0+$/,'');
+}
+function formatName(name) {
+  if (!name) return '';
+  if (name === '-') return '-';
+  // Converts to lowercase first, then capitalizes the first letter of each word
+  return name.toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function shovelTotalsFromRow(row){
+  if(Array.isArray(row?.dumpers)){
+    return row.dumpers.reduce((acc,d)=>{
+      acc.rom += n(d.rom); acc.waste += n(d.waste); acc.sp += n(d.sp);
+      return acc;
+    }, {rom:0,waste:0,sp:0});
+  }
+  return {rom:n(row?.romTrips), waste:n(row?.wasteTrips), sp:n(row?.spTrips)};
+}
+// ═══════════════════════════════════════════════════
+// B/D SECTION & IDLE TYPE CODE TABLES (Shovel card only)
+// Mirrors BD_SECTIONS / IDLE_TYPES in machinery.html — the report only
+// ever receives the stored *name* (e.g. "Trip Rope/Chain"), so these
+// tables let the report look the matching code (e.g. "M-26") back up.
+// ═══════════════════════════════════════════════════
+const SHOVEL_BD_SECTIONS = {
+  'Mech.': [
+    {code:'M-1',name:'Air Compressor'},{code:'M-2',name:'Body'},{code:'M-3',name:'Boom Assembly'},
+    {code:'M-4',name:'Bucket Assembly'},{code:'M-5',name:'Cabin'},{code:'M-6',name:'Cabin AC'},
+    {code:'M-7',name:'Crowd System'},{code:'M-8',name:'Dipper Assembly'},{code:'M-9',name:'Hoist Rope'},
+    {code:'M-10',name:'Hoist System'},{code:'M-11',name:'Housekeeping'},{code:'M-12',name:'Hydraulic/Hose'},
+    {code:'M-13',name:'Joystick control'},{code:'M-14',name:'Latch Bar/Keeper'},{code:'M-15',name:'Lubrication'},
+    {code:'M-16',name:'Oil Leakage'},{code:'M-17',name:'Others'},{code:'M-18',name:'Overhauling Maint.'},
+    {code:'M-19',name:'Propel System'},{code:'M-20',name:'Safety Clutch'},{code:'M-21',name:'Scheduled Maint.'},
+    {code:'M-22',name:'Steering System'},{code:'M-23',name:'Swing System'},{code:'M-24',name:'Teeth Changing'},
+    {code:'M-25',name:'Tie Rod'},{code:'M-26',name:'Trip Rope/Chain'},{code:'M-27',name:'Under Carriage'}
+  ],
+  'Elec.': [
+    {code:'E-1',name:'Cabin AC'},{code:'E-2',name:'Control Circuit'},{code:'E-3',name:'Crowd System'},
+    {code:'E-4',name:'DC trip'},{code:'E-5',name:'Feeder/O.C.B.'},{code:'E-6',name:'Hoist System'},
+    {code:'E-7',name:'Housekeeping'},{code:'E-8',name:'Lighting/No power'},{code:'E-9',name:'MG Set'},
+    {code:'E-10',name:'Others'},{code:'E-11',name:'Overhauling Maint.'},{code:'E-12',name:'PLC Panel'},
+    {code:'E-13',name:'Propel System'},{code:'E-14',name:'Ring Collector'},{code:'E-15',name:'Sched. maintenance'},
+    {code:'E-16',name:'Swing System'},{code:'E-17',name:'Trailing Cable'},{code:'E-18',name:'Transformer'},
+    {code:'E-19',name:'Motor'}
+  ]
+};
+const SHOVEL_IDLE_TYPES = [
+  {code:'I-1',name:'Shift Start/End'},{code:'I-2',name:'Blasting'},{code:'I-3',name:'No dumper'},
+  {code:'I-4',name:'Plant B/D'},{code:'I-5',name:'Bad Weather'},{code:'I-6',name:'Tea Time'},
+  {code:'I-7',name:'IR Issue'},{code:'I-8',name:'Event/Program'},{code:'I-9',name:'No operator'},{code:'I-10',name:'Others'}
+];
+function bdCodeOf(row){
+  if(!row || !row.section) return '';
+  const list = SHOVEL_BD_SECTIONS[row.type] || [];
+  const found = list.find(s=>s.name===row.section);
+  return found ? found.code : row.section;
+}
+function idleCodeOf(row){
+  if(!row || !row.type) return '';
+  const found = SHOVEL_IDLE_TYPES.find(t=>t.name===row.type);
+  return found ? found.code : row.type;
+}
+function detailGrid(rows, labelKey, fallbackLabel){
+  const clean = (rows||[]).filter(r=>r && (r[labelKey] || r.type || r.section || r.hrs || r.description));
+  if(!clean.length) return '<div class="sr-detail-grid empty"></div>';
+  return `<div class="sr-detail-grid" style="--detail-count:${Math.max(clean.length,1)}">${clean.map(r=>{
+    const label = r[labelKey] || r.section || r.type || r.description || fallbackLabel || '';
+    return `<div class="sr-detail-pair"><div>${escapeHtml(label)}</div><div>${escapeHtml(fmtNum(r.hrs))}</div></div>`;
+  }).join('')}</div>`;
+}
+// Remarks column — shows the "AT SHIFT END" OK/B/D toggle (md.statusEnd) on
+// the first line, and the "Status @ End" dropdown value (md.statusAtEnd,
+// or its manual free-text entry when set to "Enter Manually") in brackets
+// on the line below. Independent of any other remark/description field.
+// Note: the AT SHIFT END toggle in machinery.html only writes 'B/D' when
+// explicitly clicked — its OK state is the untouched/default state (the
+// button UI itself treats "not B/D" as OK), so an unset statusEnd here
+// means OK, matching what the toggle visually shows.
+function shovelEndStatusText(md){
+  const atEnd = md?.statusEnd === 'B/D' ? 'B/D' : 'OK';
+  const statusAtEnd = md?.statusAtEnd === 'Enter Manually'
+    ? (md?.statusAtEndManual || '')
+    : (md?.statusAtEnd || '');
+  return statusAtEnd ? `${atEnd}\n(${statusAtEnd})` : atEnd;
+}
+function buildShovelRows(data){
+  const rows = reportMachineRows(data);
+  if(!rows.length){
+    return '<tr><td colspan="14" class="sr-center sr-empty-row">No Shovel or Rock Breaker machines found in the machinery master list.</td></tr>';
+  }
+  return rows.map(({machineId, md, operator, helper, trips, isFirst})=>{
+    const totalTrips = trips.rom + trips.sp + trips.waste;
+    
+    // Default to blank/empty values for subsequent crews on the same shovel
+    let schedHtml = '', avlHtml = '', utlHtml = '', bdHtml = '<div class="sr-detail-grid empty"></div>', bdTotalHtml = '', idleHtml = '<div class="sr-detail-grid empty"></div>', idleTotalHtml = '', remarksHtml = '';
+    
+    // Only populate machine details if this is the first crew's row
+    if (isFirst) {
+      schedHtml = escapeHtml(fmtNum(md.schedHrs ?? 8));
+      avlHtml = escapeHtml(fmtNum(md.avlHrs));
+      utlHtml = escapeHtml(fmtNum(md.utlHrs));
+      
+      const bdRows = md.bdRows || [];
+      const idleRows = md.idleRows || [];
+      const bdTotal = bdRows.reduce((s,r)=>s+n(r.hrs),0);
+      const idleTotal = idleRows.reduce((s,r)=>s+n(r.hrs),0);
+      
+      bdHtml = detailGrid(bdRows.map(r=>({...r, _code:bdCodeOf(r)})), '_code', 'Code');
+      bdTotalHtml = escapeHtml(fmtNum(bdTotal));
+      
+      idleHtml = detailGrid(idleRows.map(r=>({...r, _code:idleCodeOf(r)})), '_code', 'Idle');
+      idleTotalHtml = escapeHtml(fmtNum(idleTotal));
+      
+      remarksHtml = escapeHtml(shovelEndStatusText(md)).replace(/\n/g,'<br>');
+    }
+
+    return `<tr>
+      <td class="sr-center sr-machine">${escapeHtml(machineryDisplayName(machineId))}</td>
+      <td class="sr-operator"><div>${escapeHtml(formatName(operator))}</div><div>${escapeHtml(formatName(helper))}</div></td>
+      <td class="sr-center">${schedHtml}</td>
+      <td class="sr-center">${avlHtml}</td>
+      <td class="sr-center">${utlHtml}</td>
+      <td class="sr-detail-cell">${bdHtml}</td>
+      <td class="sr-center">${bdTotalHtml}</td>
+      <td class="sr-detail-cell">${idleHtml}</td>
+      <td class="sr-center">${idleTotalHtml}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(trips.rom))}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(trips.sp))}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(trips.waste))}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(totalTrips))}</td>
+      <td class="sr-remarks">${remarksHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+function buildTotalsRow(data){
+  const rows = reportMachineRows(data);
+  const totals = rows.reduce((acc,{md,trips,isFirst})=>{
+    // Only sum the machine's hours if this is the first crew to prevent double-counting
+    if (isFirst) {
+      acc.sched += n(md.schedHrs ?? 8);
+      acc.avl += n(md.avlHrs);
+      acc.utl += n(md.utlHrs);
+      acc.bd += (md.bdRows||[]).reduce((s,r)=>s+n(r.hrs),0);
+      acc.idle += (md.idleRows||[]).reduce((s,r)=>s+n(r.hrs),0);
+    }
+    // Always sum trips, as each crew contributes uniquely
+    acc.rom += trips.rom; acc.sp += trips.sp; acc.waste += trips.waste;
+    return acc;
+  }, {sched:0,avl:0,utl:0,bd:0,idle:0,rom:0,sp:0,waste:0});
+  return `<tr class="sr-total-row">
+    <td colspan="2">Total</td>
+    <td>${fmtNum(totals.sched)}</td><td>${fmtNum(totals.avl)}</td><td>${fmtNum(totals.utl)}</td>
+    <td>Total</td><td>${fmtNum(totals.bd)}</td>
+    <td>Total</td><td>${fmtNum(totals.idle)}</td>
+    <td>${fmtNum(totals.rom)}</td><td>${fmtNum(totals.sp)}</td><td>${fmtNum(totals.waste)}</td><td>${fmtNum(totals.rom+totals.sp+totals.waste)}</td>
+    <td></td>
+  </tr>`;
+}
+
+function collectUsedCodes(data){
+  const rows = reportMachineRows(data);
+  const mech = new Map(), elec = new Map(), idle = new Map();
+  rows.forEach(({md, isFirst})=>{
+    if (!isFirst) return; // Ignore duplicate data for the same machine
+    (md.bdRows||[]).forEach(r=>{
+      if(!r || !r.section) return;
+      const list = SHOVEL_BD_SECTIONS[r.type] || [];
+      const found = list.find(s=>s.name===r.section);
+      const code = found ? found.code : r.section;
+      const name = found ? found.name : r.section;
+      const map = r.type === 'Elec.' ? elec : mech;
+      if(!map.has(code)) map.set(code, name);
+    });
+    (md.idleRows||[]).forEach(r=>{
+      if(!r || !r.type) return;
+      const found = SHOVEL_IDLE_TYPES.find(t=>t.name===r.type);
+      const code = found ? found.code : r.type;
+      const name = found ? found.name : r.type;
+      if(!idle.has(code)) idle.set(code, name);
+    });
+  });
+  return { mech, elec, idle };
+}
+
+function legendLines(map){
+  if(!map.size) return '&nbsp;';
+  return [...map.entries()].map(([code,name])=>`<div>&#8226; ${escapeHtml(code.replace('-',''))}-${escapeHtml(name)}</div>`).join('');
+}
+
+
+function buildShovelRemarksBox(data){
+  const lines = [];
+  const lineKeys = new Set();
+  const addLine = (text) => {
+    const clean = String(text ?? '').trim();
+    if(!clean) return;
+    const key = clean.toLowerCase();
+    if(lineKeys.has(key)) return;
+    lineKeys.add(key);
+    lines.push(clean);
+  };
+
+  reportMachineRows(data).forEach(({machineId, md, isFirst}) => {
+    if (!isFirst) return; // Prevent duplicate iteration over the same machine
+    const segments = [];
+    const segKeys = new Set();
+    const addSeg = (text) => {
+      const clean = String(text ?? '').trim();
+      if(!clean) return;
+      const key = clean.toLowerCase();
+      if(segKeys.has(key)) return;
+      segKeys.add(key);
+      segments.push(clean);
+    };
+    (md.bdRows || []).forEach(r => {
+      const desc = String(r?.description || '').trim();
+      if(!desc) return;
+      const status = String(r?.status || '').trim();
+      addSeg(status ? `${desc}, ${status}` : desc);
+    });
+    addSeg(md.remarks);
+    if(!segments.length) return;
+    addLine(`${machineryDisplayName(machineId)} - ${segments.join(' | ')}`);
+  });
+
+  [data.workDoneAndRemarks?.shovelAndRockBreaker, data.otherInformation].forEach(src => {
+    String(src || '').split(/\r?\n/).forEach(addLine);
+  });
+
+  if(!lines.length) return '&nbsp;';
+  return lines.map(l => `<div>&#8226; ${escapeHtml(l)}</div>`).join('');
+}
+
+function lowerReportHtml(data){
+  const affected = (data.production?.affectedBy || []).filter(Boolean);
+  const stoppage = (data.production?.plantStoppage || []).filter(r => {
+    if(typeof r === 'string') return r;
+    return r?.reason || r?.hours != null || r?.minutes != null;
+  });
+
+  // Add bullet points to affected lines
+  const affectedLines = affected.length 
+    ? affected.map(v => `<div>&#8226; ${escapeHtml(v)}</div>`).join('') 
+    : '&nbsp;';
+
+  let stopHrs = 0; let stopMins = 0;
+  let hasStoppageTime = false;
+  
+  // Add asterisks and format duration to match "0h 40min"
+  const stoppageLines = stoppage.length ? stoppage.map(r => {
+    if(typeof r === 'string') return `<div>&#8226; ${escapeHtml(r)}</div>`;
+    
+    const h = n(r.hours); const m = n(r.minutes);
+    if (r.hours != null || r.minutes != null) hasStoppageTime = true;
+    
+    stopHrs += h; stopMins += m;
+    const dur = (r.hours != null || r.minutes != null) ? ` - ${h}h ${m}min` : '';
+    
+    return `<div>&#8226; ${escapeHtml(r.reason || '')}${dur}</div>`;
+  }).join('') : '&nbsp;';
+
+  // Calculate total header stoppage time
+  stopHrs += Math.floor(stopMins / 60);
+  stopMins = stopMins % 60;
+  const totalStoppageStr = hasStoppageTime ? ` - ${stopHrs}h ${stopMins}min` : '';
+
+  // Get production totals
+  const romT = data.production?.rom || 0;
+  const wasteT = data.production?.waste || 0;
+  const spT = data.production?.stockpile || data.production?.sp || 0;
+  const usedCodes = collectUsedCodes(data);
+
+  return `<div class="sr-lower">
+    <div class="sr-lower-grid">
+      <div class="sr-box-affected">
+        <div class="sr-lower-title">Production/Waste mining Affected Due to</div>
+        <div class="sr-box-content">${affectedLines}</div>
+      </div>
+      <div class="sr-box-stoppage">
+        <div class="sr-lower-title">Plant Stoppage${totalStoppageStr}</div>
+        <div class="sr-box-content">${stoppageLines}</div>
+      </div>
+      <div class="sr-box-production">
+        <div class="sr-prod-item"><span>ROM</span><span>-</span><span>${fmtNum(romT)} T</span></div>
+        <div class="sr-prod-item"><span>Waste</span><span>-</span><span>${fmtNum(wasteT)} T</span></div>
+        <div class="sr-prod-item"><span>Stockpile</span><span>-</span><span>${fmtNum(spT)} T</span></div>
+      </div>
+    </div>
+    <div class="sr-legend">
+      <div class="sr-legend-title">Mechanical B/D</div>
+      <div class="sr-legend-title">Electrical B/D</div>
+      <div class="sr-legend-title">Idle Detail</div>
+      <div class="sr-legend-title sr-legend-title-remarks">Remarks</div>
+      <div class="sr-legend-box">${legendLines(usedCodes.mech)}</div>
+      <div class="sr-legend-box">${legendLines(usedCodes.elec)}</div>
+      <div class="sr-legend-box">${legendLines(usedCodes.idle)}</div>
+      <div class="sr-legend-box">${buildShovelRemarksBox(data)}</div>
+    </div>
+    <div class="sr-signatures">
+      <div><div class="sign-name">${data.icMech ? escapeHtml(formatName(data.icMech)) : '&nbsp;'}</div><div>Shift In-charge (Mech.)</div></div>
+      <div><div class="sign-name">${data.icElec ? escapeHtml(formatName(data.icElec)) : '&nbsp;'}</div><div>Shift In-charge (Elect.)</div></div>
+      <div><div class="sign-name">${data.ic ? escapeHtml(formatName(data.ic)) : '&nbsp;'}</div><div>Shift In-charge (Min.)</div></div>
+    </div>
+
+  </div>`;
+}
+
+function buildShovelReportHtml(data, date, shift){
+  return `<!doctype html><html><head><meta charset="UTF-8"><title>${escapeHtml(buildShovelReportFilename(date, shift))}</title>
+    <style>${shovelReportCss()}<\/style><\/head><body>
+      <main class="sr-page">
+        <header class="sr-header">
+          <img class="sr-logo sr-logo-left" src="${NMDC_LOGO_DATA_URI}" alt="NMDC">
+          <div class="sr-title-block">
+            <div class="sr-title sr-title-1">NMDC LIMITED<\/div>
+            <div class="sr-title sr-title-2">BAILADILA IRON ORE MINES, KIRANDUL COMPLEX<\/div>
+            <div class="sr-title sr-title-3">SHOVEL SHIFT REPORT<\/div>
+          <\/div>
+          <img class="sr-logo sr-logo-right" src="${GPTW_LOGO_DATA_URI}" alt="Great Place To Work Certified">
+        <\/header>
+        <section class="sr-meta">
+          <div>DATE - <span>${escapeHtml(fmtReportDate(date))}<\/span><\/div>
+          <div>SHIFT - <span>${escapeHtml(shiftShortLabel(+shift))}<\/span><\/div>
+          <div>DEPOSIT - <span>11C<\/span><\/div>
+        <\/section>
+        <table class="sr-table">
+          <colgroup>
+            <col class="c-shovel"><col class="c-operator"><col class="c-hour"><col class="c-hour"><col class="c-hour">
+            <col class="c-detail"><col class="c-total"><col class="c-detail"><col class="c-total">
+            <col class="c-trip"><col class="c-trip"><col class="c-trip"><col class="c-trip"><col class="c-remarks">
+          <\/colgroup>
+          <thead>
+            <tr>
+              <th rowspan="2">Shovel<\/th>
+              <th rowspan="2">Name of Operator<\/th>
+              <th rowspan="2">Sch. Hrs<\/th>
+              <th rowspan="2">Avl. Hrs<\/th>
+              <th rowspan="2">Utl. Hrs<\/th>
+              <th colspan="2">Breakdown&nbsp; Hours<\/th>
+              <th colspan="2">Idle Hours<\/th>
+              <th colspan="4">Output Trips<\/th>
+              <th rowspan="2">Remarks<\/th>
+            <\/tr>
+            <tr>
+              <th>Code / Hrs<\/th><th>Total<\/th>
+              <th>Code / Hrs<\/th><th>Total<\/th>
+              <th>ROM<\/th><th>SP<\/th><th>Waste<\/th><th>Total<\/th>
+            <\/tr>
+          <\/thead>
+          <tbody>${buildShovelRows(data)}${buildTotalsRow(data)}<\/tbody>
+        <\/table>
+        ${lowerReportHtml(data)}
+      <\/main>
+    <\/body><\/html>`;
+}
+function buildShovelReportFilename(dateStr, shift){
+  if(!dateStr) return 'Shovel-Shift-Report';
+  const [y,m,d] = dateStr.split('-');
+  return `Shovel-Shift-Report-${d}-${m}-${String(y).slice(-2)}-(${shiftShortLabel(+shift)}-Shift)`;
+}
+function shovelReportCss(){
+  return `
+    @page { size: A4 landscape; margin: ${SHOVEL_REPORT_MARGINS.top} ${SHOVEL_REPORT_MARGINS.right} ${SHOVEL_REPORT_MARGINS.bottom} ${SHOVEL_REPORT_MARGINS.left}; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:#d7d7d7; color:#000; font-family: Arial, Helvetica, sans-serif; }
+    .sr-page { width: 11.142in; min-height: 7.77in; margin: 12px auto; background:#fff; padding:0; padding-bottom: 0.2in; display: flex; flex-direction: column; position: relative; }
+    .sr-header { position:relative; height:0.72in; display:flex; align-items:flex-start; justify-content:center; }
+    .sr-logo { position:absolute; top:0.02in; width:0.66in; height:0.7in; object-fit:contain; }
+    .sr-logo-left { left:0.12in; }
+    .sr-logo-right { right:0.2in; }
+    .sr-title-block { text-align:center; width:100%; line-height:1.05; font-weight:700; }
+    .sr-title-1 { font-size:18px; margin-top:0.02in; }
+    .sr-title-2 { font-size:17px; margin-top:2px; }
+    .sr-title-3 { font-size:19px; margin-top:11px; text-decoration: underline double; }
+    .sr-meta { display:grid; grid-template-columns: 1fr 0.9fr 1.1fr; align-items:center; height:0.28in; font-size:12px; font-weight:700; padding:0 1.05in 0 1.35in; margin-bottom:5px;}
+    .sr-meta span { 
+      position: relative; 
+      display: inline-block; 
+      font-weight: 700; 
+      margin-left: 6px; 
+    }
+    .sr-meta span::after { 
+      content: ''; 
+      position: absolute; 
+      left: -10%; 
+      right: -20%; 
+      bottom: -1px; 
+      border-bottom: 1px solid #000; 
+    }
+    table { border-collapse: collapse; width:100%; table-layout:fixed; }
+    .sr-table { font-size:11px; border:1px solid #000; }
+    .sr-table thead { border-bottom: 3px double #000; }
+    .sr-table th, .sr-table td { border:1px solid #000; padding:2px 3px; vertical-align:middle; overflow-wrap:anywhere; }
+    .sr-table th { text-align:center; font-weight:700; }
+    .sr-table tbody tr { height:0.36in; }
+    .c-shovel{width:7%;}.c-operator{width:16%;}.c-hour{width:4.6%;}.c-detail{width:17%;}.c-total{width:4.2%;}.c-trip{width:4.4%;}.c-remarks{width:10.8%;}
+    .sr-center { text-align:center; }
+    .sr-machine { font-weight:700; }
+    .sr-operator { 
+      text-align: center; 
+      padding: 0 !important; 
+    }
+    .sr-operator div { 
+      padding: 3px 2px; 
+      min-height: 0.18in; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+    }
+    .sr-operator div:first-child { 
+      border-bottom: 1px dotted #000; 
+    }
+    .sr-detail-cell { padding:0 !important; }
+    .sr-detail-grid { display:grid; grid-template-columns:repeat(var(--detail-count), minmax(0,1fr)); min-height:0.34in; }
+    .sr-detail-grid.empty { min-height:0.34in; }
+    
+    /* Changed border-left to dotted for vertical division */
+    .sr-detail-pair { display:grid; grid-template-rows:1fr 1fr; text-align:center; border-left:1px dotted #000; line-height:1.1; }
+    .sr-detail-pair:first-child { border-left:0; }
+    .sr-detail-pair div { display:flex; align-items:center; justify-content:center; min-height:0.16in; padding:1px; }
+    
+    /* Changed border-top to dotted for horizontal division */
+    .sr-detail-pair div + div { border-top:1px dotted #000; }
+    
+    .sr-remarks { text-align:center; line-height:1.15; }
+    .sr-total-row td { text-align:center; font-weight:700; height:0.1in; }
+    .sr-empty-row { height:0.7in; }
+    .sr-lower { margin-top:0.04in; font-size:11px; display: flex; flex-direction: column; flex-grow: 1; }
+    .sr-lower-grid { display:grid; grid-template-columns: 43% 43% 14%; border-left:1px solid #000; border-top:1px solid #000; min-height: 1.1in; }
+    .sr-lower-grid > div { border-right:1px solid #000; border-bottom:1px solid #000; padding:4px 6px; display: flex; flex-direction: column; }
+    .sr-box-affected .sr-box-content, .sr-box-stoppage .sr-box-content { margin-top: 4px; line-height: 1.35; }
+    /* Stretch items to fill width, aligning hyphens centrally via Grid */
+    .sr-box-production { 
+      justify-content: center; 
+      align-items: stretch; 
+      font-weight: 700; 
+      font-size: 12px; 
+      gap: 16px; 
+    }
+    .sr-prod-item { 
+      display: grid; 
+      grid-template-columns: 1fr auto 1fr; 
+      gap: 8px; 
+    }
+    .sr-prod-item span:nth-child(1) { text-align: right; }
+    .sr-prod-item span:nth-child(2) { text-align: center; }
+    .sr-prod-item span:nth-child(3) { text-align: left; }
+    .sr-lower-title { font-weight:700; }
+    .sr-legend-title { font-weight:700; text-align:center; }
+    .sr-legend-title-remarks { text-align: left; border-bottom:none !important; }
+    .sr-legend { margin-top:0.04in; display:grid; grid-template-columns: 15% 15% 15% 55%; grid-template-rows:0.22in auto; border-left:1px solid #000; border-top:1px solid #000; }
+    .sr-legend > div { border-right:1px solid #000; border-bottom:1px solid #000; padding:3px 5px; }
+    .sr-legend-box { font-size:11px; line-height:1.35; min-height:0.85in; text-align:left; }
+    .sr-legend-box div + div { margin-top:1px; }
+    .sr-signatures { position: absolute; bottom: 0; left: 0; width: 100%; display:grid; grid-template-columns: 1fr 1fr 1fr; font-weight:700; text-align:center; border: none; }
+    .sr-signatures > div { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding-top: 4px; border: none; }
+    .sign-name { margin-bottom: 6px; font-weight: 300; font-size: 11px; }
+    @media screen { .sr-page { box-shadow:0 8px 30px rgba(0,0,0,.25); } }
+    @media print { body { background:#fff; } .sr-page { width:auto; min-height:7.67in; margin:0; box-shadow:none; } }
+  `;
+}
+
+function openShovelReportPreview(data, date, shift){
+  return printReportHtml(buildShovelReportHtml(data, date, shift));
+}
+
+// ═══════════════════════════════════════════════════
+// DRILL SHIFT REPORT CONSTANTS & DATA MAPPERS
+// ═══════════════════════════════════════════════════
+
+const DRILL_BD_SECTIONS = {
+  'Mech.': [
+    {code:'M-1',name:'AC/Fan'},{code:'M-2',name:'Air Hose'},{code:'M-3',name:'Body'},
+    {code:'M-4',name:'Cabin'},{code:'M-5',name:'Compressor'},{code:'M-6',name:'CRD'},
+    {code:'M-7',name:'DHT Assembly'},{code:'M-8',name:'Feed Chain'},{code:'M-9',name:'Hose Puncture'},
+    {code:'M-10',name:'Hot Blower'},{code:'M-11',name:'Hydraulic System'},{code:'M-12',name:'Lever and Joystick'},
+    {code:'M-13',name:'Oil Leakage'},{code:'M-14',name:'Others'},{code:'M-15',name:'Overhauling Maint'},
+    {code:'M-16',name:'Propel System'},{code:'M-17',name:'Rod alingment'},{code:'M-18',name:'Rod Carrier & Lock'},
+    {code:'M-19',name:'Rot. Boid & Guide'},{code:'M-20',name:'Rotary Drive'},{code:'M-21',name:'Safety Rope'},
+    {code:'M-22',name:'Scheduled Maint'},{code:'M-23',name:'Starting Trouble'},{code:'M-24',name:'Under Carriage'}
+  ],
+  'Elec.': [
+    {code:'E-1',name:'Cabin'},{code:'E-2',name:'Compr Motor'},{code:'E-3',name:'Lighting'},
+    {code:'E-4',name:'Line & O.C.B.'},{code:'E-5',name:'M/C trip'},{code:'E-6',name:'Main Motor'},
+    {code:'E-7',name:'No Power'},{code:'E-8',name:'Others'},{code:'E-9',name:'Overhauling Maint'},
+    {code:'E-10',name:'Propel Motor'},{code:'E-11',name:'Rotary Drive'},{code:'E-12',name:'Sched. maintenance'},
+    {code:'E-13',name:'Starting Trouble'},{code:'E-14',name:'Switch & Relays'},{code:'E-15',name:'Trailing Cable'}
+  ]
+};
+
+const DRILL_IDLE_TYPES = [
+  {code:'I-1',name:'Bad Weather'},{code:'I-2',name:'Bit not opening'},{code:'I-3',name:'CGEB Power Failure'},
+  {code:'I-4',name:'Idle for blasting'},{code:'I-5',name:'Incoming cable'},{code:'I-6',name:'M/C PSG shifting'},
+  {code:'I-7',name:'No bit/water/casing'},{code:'I-8',name:'No point/drill block'},{code:'I-9',name:'No. Opr/Crew'},
+  {code:'I-10',name:'Not reqd. to run'},{code:'I-11',name:'Others'},{code:'I-12',name:'Rod Change'},
+  {code:'I-13',name:'Rod/bit opening'},{code:'I-14',name:'Shift Start/end'},{code:'I-15',name:'Tea Time'}
+];
+
+function drillBdCodeOf(row){
+  if(!row || !row.section) return '';
+  const list = DRILL_BD_SECTIONS[row.type] || [];
+  const found = list.find(s=>s.name===row.section);
+  return found ? found.code : row.section;
+}
+
+function drillIdleCodeOf(row){
+  if(!row || !row.type) return '';
+  const found = DRILL_IDLE_TYPES.find(t=>t.name===row.type);
+  return found ? found.code : row.type;
+}
+
+function drillMachineRows(data){
+  // Retrieve active machines belonging to the Drill group, maintaining machinery master list order
+  const drills = activeMachinery().filter(m => String(m.group||'').trim().toLowerCase() === 'drill');
+  
+  return drills.map(m => {
+    const machineId = m.id;
+    const md = data.machinery?.[machineId] || {};
+    const drillRow = (data.drillRows||[]).find(r => r && r.drill === machineId) || null;
+    const operator = drillRow?.operator || '';
+    const helper = drillRow?.helper || '';
+    return { machineId, md, operator, helper, drillRow };
+  });
+}
+
+function collectUsedDrillCodes(data){
+  const rows = drillMachineRows(data);
+  const mech = new Map(), elec = new Map(), idle = new Map();
+  rows.forEach(({md})=>{
+    (md.bdRows||[]).forEach(r=>{
+      if(!r || !r.section) return;
+      const list = DRILL_BD_SECTIONS[r.type] || [];
+      const found = list.find(s=>s.name===r.section);
+      const code = found ? found.code : r.section;
+      const name = found ? found.name : r.section;
+      const map = r.type === 'Elec.' ? elec : mech;
+      if(!map.has(code)) map.set(code, name);
+    });
+    (md.idleRows||[]).forEach(r=>{
+      if(!r || !r.type) return;
+      const found = DRILL_IDLE_TYPES.find(t=>t.name===r.type);
+      const code = found ? found.code : r.type;
+      const name = found ? found.name : r.type;
+      if(!idle.has(code)) idle.set(code, name);
+    });
+  });
+  return { mech, elec, idle };
+}
+
+// ═══════════════════════════════════════════════════
+// DRILL SHIFT REPORT HTML GENERATORS
+// ═══════════════════════════════════════════════════
+
+
+function buildDrillOtherDetailBox(data){
+  const lines = [];
+  const lineKeys = new Set();
+  const addLine = (text) => {
+    const clean = String(text ?? '').trim();
+    if(!clean) return;
+    const key = clean.toLowerCase();
+    if(lineKeys.has(key)) return;
+    lineKeys.add(key);
+    lines.push(clean);
+  };
+
+  drillMachineRows(data).forEach(({machineId, md}) => {
+    const segments = [];
+    const segKeys = new Set();
+    const addSeg = (text) => {
+      const clean = String(text ?? '').trim();
+      if(!clean) return;
+      const key = clean.toLowerCase();
+      if(segKeys.has(key)) return;
+      segKeys.add(key);
+      segments.push(clean);
+    };
+    (md.bdRows || []).forEach(r => {
+      const desc = String(r?.description || '').trim();
+      if(!desc) return;
+      const status = String(r?.status || '').trim();
+      addSeg(status ? `${desc}, ${status}` : desc);
+    });
+    addSeg(md.remarks);
+    if(!segments.length) return;
+    addLine(`${machineryDisplayName(machineId)} - ${segments.join(' | ')}`);
+  });
+
+  // Pull ONLY from the Drill "Work Done and Remarks" text box, excluding "Other Information"
+  [data.workDoneAndRemarks?.drill].forEach(src => {
+    String(src || '').split(/\r?\n/).forEach(addLine);
+  });
+
+  if(!lines.length) return '&nbsp;';
+  return lines.map(l => `<div>&#8226; ${escapeHtml(l)}</div>`).join('');
+}
+
+function lowerDrillReportHtml(data){
+  // Production totals for right box remain unchanged
+  const romT = data.production?.rom || 0;
+  const wasteT = data.production?.waste || 0;
+  const spT = data.production?.stockpile || data.production?.sp || 0;
+  const usedCodes = collectUsedDrillCodes(data);
+
+  return `<div class="sr-lower">
+    <div class="sr-lower-grid-drill">
+      <div class="sr-box-merged-remarks">
+        <div class="sr-lower-title">Remarks</div>
+        <!-- Moved details into the Remarks box here -->
+        <div class="sr-box-content">${buildDrillOtherDetailBox(data)}</div>
+      </div>
+      <div class="sr-box-production">
+        <div class="sr-prod-item"><span>ROM</span><span>-</span><span>${fmtNum(romT)} T</span></div>
+        <div class="sr-prod-item"><span>Waste</span><span>-</span><span>${fmtNum(wasteT)} T</span></div>
+        <div class="sr-prod-item"><span>Stockpile</span><span>-</span><span>${fmtNum(spT)} T</span></div>
+      </div>
+    </div>
+    <div class="sr-legend">
+      <div class="sr-legend-title">Mechanical B/D</div>
+      <div class="sr-legend-title">Electrical B/D</div>
+      <div class="sr-legend-title">Idle Detail</div>
+      <div class="sr-legend-title sr-legend-title-remarks">Other Detail</div>
+      <div class="sr-legend-box">${legendLines(usedCodes.mech)}</div>
+      <div class="sr-legend-box">${legendLines(usedCodes.elec)}</div>
+      <div class="sr-legend-box">${legendLines(usedCodes.idle)}</div>
+      <!-- Emptied the Other Detail box here -->
+      <div class="sr-legend-box">&nbsp;</div>
+    </div>
+    <div class="sr-signatures">
+      <div><div class="sign-name">${data.icMech ? escapeHtml(formatName(data.icMech)) : '&nbsp;'}</div><div>Shift In-charge (Mech.)</div></div>
+      <div><div class="sign-name">${data.icElec ? escapeHtml(formatName(data.icElec)) : '&nbsp;'}</div><div>Shift In-charge (Elect.)</div></div>
+      <div><div class="sign-name">${data.ic ? escapeHtml(formatName(data.ic)) : '&nbsp;'}</div><div>Shift In-charge (Min.)</div></div>
+    </div>
+  </div>`;
+}
+
+
+
+function buildDrillTotalsRow(data){
+  const rows = drillMachineRows(data);
+  const totals = rows.reduce((acc,{md, drillRow})=>{
+    acc.sched += n(md.schedHrs ?? 8);
+    acc.avl += n(md.avlHrs);
+    acc.utl += n(md.utlHrs);
+    acc.bd += (md.bdRows||[]).reduce((s,r)=>s+n(r.hrs),0);
+    acc.idle += (md.idleRows||[]).reduce((s,r)=>s+n(r.hrs),0);
+    
+    if (drillRow && drillRow.rows) {
+      drillRow.rows.forEach(r => {
+        acc.holes += n(r.holes);
+        acc.meter += n(r.holes) * n(r.depth);
+      });
+    }
+    return acc;
+  }, {sched:0, avl:0, utl:0, bd:0, idle:0, holes:0, meter:0});
+
+  return `<tr class="sr-total-row">
+    <td colspan="2">Total</td>
+    <td>${fmtNum(totals.sched)}</td><td>${fmtNum(totals.avl)}</td><td>${fmtNum(totals.utl)}</td>
+    <td>Total</td><td>${fmtNum(totals.bd)}</td>
+    <td>Total</td><td>${fmtNum(totals.idle)}</td>
+    <td>${fmtNum(totals.holes)}</td><td></td><td>${fmtNum(totals.meter)}</td><td></td>
+    <td></td>
+  </tr>`;
+}
+
+function buildDrillRows(data){
+  const rows = drillMachineRows(data);
+  if(!rows.length){
+    return '<tr><td colspan="14" class="sr-center sr-empty-row">No Drill machines found in the machinery master list.</td></tr>';
+  }
+  
+  return rows.map(({machineId, md, operator, helper, drillRow})=>{
+    const bdRows = md.bdRows || [];
+    const idleRows = md.idleRows || [];
+    const bdTotal = bdRows.reduce((s,r)=>s+n(r.hrs),0);
+    const idleTotal = idleRows.reduce((s,r)=>s+n(r.hrs),0);
+    
+    // Create vertically stacked lines for drill specific details
+    let holesHtml = '', depthHtml = '', meterHtml = '', strataHtml = '';
+    if (drillRow && drillRow.rows && drillRow.rows.length > 0) {
+      const cleanRows = drillRow.rows.filter(r => n(r.holes) > 0 || n(r.depth) > 0 || r.strata);
+      if (cleanRows.length > 0) {
+        holesHtml = cleanRows.map(r => `<div class="sr-drill-line">${escapeHtml(fmtNum(r.holes))}</div>`).join('');
+        depthHtml = cleanRows.map(r => `<div class="sr-drill-line">${escapeHtml(fmtNum(r.depth))}</div>`).join('');
+        meterHtml = cleanRows.map(r => `<div class="sr-drill-line">${escapeHtml(fmtNum(n(r.holes) * n(r.depth)))}</div>`).join('');
+        strataHtml = cleanRows.map(r => `<div class="sr-drill-line">${r.strata ? escapeHtml(r.strata) : '&nbsp;'}</div>`).join('');
+      }
+    }
+
+    return `<tr>
+      <td class="sr-center sr-machine">${escapeHtml(machineryDisplayName(machineId))}</td>
+      <td class="sr-operator"><div>${escapeHtml(formatName(operator))}</div><div>${escapeHtml(formatName(helper))}</div></td>
+      <td class="sr-center">${escapeHtml(fmtNum(md.schedHrs ?? 8))}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(md.avlHrs))}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(md.utlHrs))}</td>
+      <td class="sr-detail-cell">${detailGrid(bdRows.map(r=>({...r, _code:drillBdCodeOf(r)})), '_code', 'Code')}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(bdTotal))}</td>
+      <td class="sr-detail-cell">${detailGrid(idleRows.map(r=>({...r, _code:drillIdleCodeOf(r)})), '_code', 'Idle')}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(idleTotal))}</td>
+      
+      <!-- Drill specific columns rendered as stacked grids -->
+      <td class="sr-center sr-stacked-cell">${holesHtml}</td>
+      <td class="sr-center sr-stacked-cell">${depthHtml}</td>
+      <td class="sr-center sr-stacked-cell">${meterHtml}</td>
+      <td class="sr-center sr-stacked-cell">${strataHtml}</td>
+      
+      <td class="sr-remarks">${escapeHtml(shovelEndStatusText(md)).replace(/\n/g,'<br>')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function buildDrillReportHtml(data, date, shift){
+  const filename = `Drill-Shift-Report-${date.split('-').reverse().join('-')}-(${shiftShortLabel(+shift)}-Shift)`;
+  
+  return `<!doctype html><html><head><meta charset="UTF-8"><title>${escapeHtml(filename)}<\/title>
+    <style>${shovelReportCss()} 
+      /* Drill specific column widths and overrides */
+      .c-drill{width:7%;} .c-operator{width:15%;} 
+      .c-hour{width:4.5%;} .c-detail{width:12%;} 
+      .c-total{width:4%;} .c-drspec{width:6.25%;} 
+      .c-remarks{width:7.5%;}
+      .sr-lower-grid-drill { display:grid; grid-template-columns: 86% 14%; border-left:1px solid #000; border-top:1px solid #000; min-height: 1.1in; }
+      .sr-lower-grid-drill > div { border-right:1px solid #000; border-bottom:1px solid #000; padding:4px 6px; display: flex; flex-direction: column; }
+      
+      /* Match the line spacing of the Shovel report's remarks box */
+      .sr-box-merged-remarks .sr-box-content { margin-top: 4px; line-height: 1.35; }
+      .sr-box-merged-remarks .sr-box-content div + div { margin-top: 1px; }
+
+      /* Vertical stacking layout for the multiple drill holes */
+      .sr-stacked-cell { padding: 0 !important; vertical-align: middle; }
+      .sr-drill-line { display: flex; align-items: center; justify-content: center; min-height: 0.18in; padding: 1px 2px; }
+      
+      /* Remove bold from ROM, Waste, Stockpile in the Drill report */
+      .sr-box-production { font-weight: normal; }
+    <\/style><\/head><body>
+      <main class="sr-page">
+        <header class="sr-header">
+          <img class="sr-logo sr-logo-left" src="${NMDC_LOGO_DATA_URI}" alt="NMDC">
+          <div class="sr-title-block">
+            <div class="sr-title sr-title-1">NMDC LIMITED<\/div>
+            <div class="sr-title sr-title-2">BAILADILA IRON ORE MINES, KIRANDUL COMPLEX<\/div>
+            <div class="sr-title sr-title-3">DRILL SHIFT REPORT<\/div>
+          <\/div>
+          <img class="sr-logo sr-logo-right" src="${GPTW_LOGO_DATA_URI}" alt="Great Place To Work Certified">
+        <\/header>
+        <section class="sr-meta">
+          <div>DATE - <span>${escapeHtml(fmtReportDate(date))}<\/span><\/div>
+          <div>SHIFT - <span>${escapeHtml(shiftShortLabel(+shift))}<\/span><\/div>
+          <div>DEPOSIT - <span>11C<\/span><\/div>
+        <\/section>
+        <table class="sr-table">
+          <colgroup>
+            <col class="c-drill"><col class="c-operator"><col class="c-hour"><col class="c-hour"><col class="c-hour">
+            <col class="c-detail"><col class="c-total"><col class="c-detail"><col class="c-total">
+            <col class="c-drspec"><col class="c-drspec"><col class="c-drspec"><col class="c-drspec"><col class="c-remarks">
+          <\/colgroup>
+          <thead>
+            <tr>
+              <th rowspan="2">Drill<\/th>
+              <th rowspan="2">Operator / Helper<\/th>
+              <th rowspan="2">Sch.<br>Hrs<\/th>
+              <th rowspan="2">Avl.<br>Hrs<\/th>
+              <th rowspan="2">Utl.<br>Hrs<\/th>
+              <th colspan="2">Breakdown&nbsp; Hours<\/th>
+              <th colspan="2">Idle Hours<\/th>
+              <th rowspan="2">No. of Holes<\/th>
+              <th rowspan="2">Depth (m)<\/th>
+              <th rowspan="2">Meter Drilled<\/th>
+              <th rowspan="2">Rock Type<\/th>
+              <th rowspan="2">Remarks<\/th>
+            <\/tr>
+            <tr>
+              <th>Code / Hrs<\/th><th>Total<\/th>
+              <th>Code / Hrs<\/th><th>Total<\/th>
+            <\/tr>
+          <\/thead>
+          <tbody>${buildDrillRows(data)}${buildDrillTotalsRow(data)}<\/tbody>
+        <\/table>
+        ${lowerDrillReportHtml(data)}
+      <\/main>
+    <\/body><\/html>`;
+}
+
+function openDrillReportPreview(data, date, shift){
+  return printReportHtml(buildDrillReportHtml(data, date, shift));
+}
+
+// ═══════════════════════════════════════════════════
+// DOZER SHIFT REPORT CONSTANTS & DATA MAPPERS
+// ═══════════════════════════════════════════════════
+
+const DOZER_BD_SECTIONS = [
+  {code:'M-1',name:'AC'},{code:'M-2',name:'Cabin'},{code:'M-3',name:'Cutting Edge'},
+  {code:'M-4',name:'Elect. Fault'},{code:'M-5',name:'Engine'},{code:'M-6',name:'Final Drive'},
+  {code:'M-7',name:'Major Repair'},{code:'M-8',name:'Oil Leakages'},{code:'M-9',name:'Others'},
+  {code:'M-10',name:'Radiator'},{code:'M-11',name:'Sched. maintenance'},{code:'M-12',name:'Starting Trouble'},
+  {code:'M-13',name:'Steering & Hoist'},{code:'M-14',name:'Transmission'},{code:'M-15',name:'Under Carriage'}
+];
+
+const DOZER_IDLE_TYPES = [
+  {code:'I-1',name:'Bad weather'},{code:'I-2',name:'No Diesel'},{code:'I-3',name:'No Operator'},
+  {code:'I-4',name:'Not reqd. to run'},{code:'I-5',name:'Others'},{code:'I-6',name:'Shift Start & end'},
+  {code:'I-7',name:'Tea Time'}
+];
+
+function dozerBdCodeOf(row){
+  if(!row || !row.section) return '';
+  const found = DOZER_BD_SECTIONS.find(s=>s.name===row.section);
+  return found ? found.code : row.section;
+}
+
+function dozerIdleCodeOf(row){
+  if(!row || !row.type) return '';
+  const found = DOZER_IDLE_TYPES.find(t=>t.name===row.type);
+  return found ? found.code : row.type;
+}
+
+function dozerMachineRows(data){
+  // Retrieve active machines belonging to the Dozer group, maintaining master list order
+  const dozers = activeMachinery().filter(m => String(m.group||'').trim().toLowerCase() === 'dozer');
+  
+  return dozers.map(m => {
+    const machineId = m.id;
+    const md = data.machinery?.[machineId] || {};
+    // Operator is extracted from allocation.html data
+    const allocRow = (data.allocationRows||[]).find(r => r && r.machinery === machineId) || null;
+    const operator = allocRow?.operator || '';
+    return { machineId, md, operator };
+  });
+}
+
+function collectUsedDozerCodes(data){
+  const rows = dozerMachineRows(data);
+  const bd = new Map(), idle = new Map();
+  rows.forEach(({md})=>{
+    (md.bdRows||[]).forEach(r=>{
+      if(!r || !r.section) return;
+      const found = DOZER_BD_SECTIONS.find(s=>s.name===r.section);
+      const code = found ? found.code : r.section;
+      const name = found ? found.name : r.section;
+      if(!bd.has(code)) bd.set(code, name);
+    });
+    (md.idleRows||[]).forEach(r=>{
+      if(!r || !r.type) return;
+      const found = DOZER_IDLE_TYPES.find(t=>t.name===r.type);
+      const code = found ? found.code : r.type;
+      const name = found ? found.name : r.type;
+      if(!idle.has(code)) idle.set(code, name);
+    });
+  });
+  return { bd, idle };
+}
+
+// ═══════════════════════════════════════════════════
+// DOZER SHIFT REPORT HTML GENERATORS
+// ═══════════════════════════════════════════════════
+
+function buildDozerRows(data){
+  const rows = dozerMachineRows(data);
+  if(!rows.length){
+    return '<tr><td colspan="11" class="sr-center sr-empty-row">No Dozer machines found in the machinery master list.</td></tr>';
+  }
+  
+  return rows.map(({machineId, md, operator})=>{
+    const bdRows = md.bdRows || [];
+    const idleRows = md.idleRows || [];
+    const bdTotal = bdRows.reduce((s,r)=>s+n(r.hrs),0);
+    const idleTotal = idleRows.reduce((s,r)=>s+n(r.hrs),0);
+    
+    // Status column processing
+    const statusAtEnd = md.statusAtEnd === 'Enter Manually' ? (md.statusAtEndManual || '') : (md.statusAtEnd || '');
+    const remarksText = md.statusEnd === 'B/D' ? 'B/D' : 'OK';
+
+    return `<tr>
+      <td class="sr-center sr-machine">${escapeHtml(machineryDisplayName(machineId))}</td>
+      <td class="sr-operator sr-single-op"><div>${escapeHtml(formatName(operator))}</div></td>
+      <td class="sr-center">${escapeHtml(fmtNum(md.schedHrs ?? 8))}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(md.avlHrs))}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(md.utlHrs))}</td>
+      <td class="sr-detail-cell">${detailGrid(bdRows.map(r=>({...r, _code:dozerBdCodeOf(r)})), '_code', 'Code')}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(bdTotal))}</td>
+      <td class="sr-detail-cell">${detailGrid(idleRows.map(r=>({...r, _code:dozerIdleCodeOf(r)})), '_code', 'Idle')}</td>
+      <td class="sr-center">${escapeHtml(fmtNum(idleTotal))}</td>
+      <td class="sr-center">${escapeHtml(statusAtEnd)}</td>
+      <td class="sr-remarks">${escapeHtml(remarksText)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function buildDozerTotalsRow(data){
+  const rows = dozerMachineRows(data);
+  const totals = rows.reduce((acc,{md})=>{
+    acc.sched += n(md.schedHrs ?? 8);
+    acc.avl += n(md.avlHrs);
+    acc.utl += n(md.utlHrs);
+    acc.bd += (md.bdRows||[]).reduce((s,r)=>s+n(r.hrs),0);
+    acc.idle += (md.idleRows||[]).reduce((s,r)=>s+n(r.hrs),0);
+    return acc;
+  }, {sched:0, avl:0, utl:0, bd:0, idle:0});
+
+  return `<tr class="sr-total-row">
+    <td colspan="2">Total</td>
+    <td>${fmtNum(totals.sched)}</td><td>${fmtNum(totals.avl)}</td><td>${fmtNum(totals.utl)}</td>
+    <td>Total</td><td>${fmtNum(totals.bd)}</td>
+    <td>Total</td><td>${fmtNum(totals.idle)}</td>
+    <td></td><td></td>
+  </tr>`;
+}
+
+function buildDozerRemarksBox(data){
+  const lines = [];
+  const lineKeys = new Set();
+  const addLine = (text) => {
+    const clean = String(text ?? '').trim();
+    if(!clean) return;
+    const key = clean.toLowerCase();
+    if(lineKeys.has(key)) return;
+    lineKeys.add(key);
+    lines.push(clean);
+  };
+
+  dozerMachineRows(data).forEach(({machineId, md}) => {
+    const segments = [];
+    const segKeys = new Set();
+    const addSeg = (text) => {
+      const clean = String(text ?? '').trim();
+      if(!clean) return;
+      const key = clean.toLowerCase();
+      if(segKeys.has(key)) return;
+      segKeys.add(key);
+      segments.push(clean);
+    };
+    (md.bdRows || []).forEach(r => {
+      const desc = String(r?.description || '').trim();
+      if(!desc) return;
+      const status = String(r?.status || '').trim();
+      addSeg(status ? `${desc}, ${status}` : desc);
+    });
+    addSeg(md.remarks);
+    if(!segments.length) return;
+    addLine(`${machineryDisplayName(machineId)} - ${segments.join(' | ')}`);
+  });
+
+  // Pull ONLY from the Dozer "Work Done and Remarks" text box, excluding "Other Information" (Matches Drill logic)
+  [data.workDoneAndRemarks?.dozer].forEach(src => {
+    String(src || '').split(/\r?\n/).forEach(addLine);
+  });
+
+  if(!lines.length) return '&nbsp;';
+  return lines.map(l => `<div>&#8226; ${escapeHtml(l)}</div>`).join('');
+}
+
+function lowerDozerReportHtml(data){
+  const romT = data.production?.rom || 0;
+  const wasteT = data.production?.waste || 0;
+  const spT = data.production?.stockpile || data.production?.sp || 0;
+  
+  const usedCodes = collectUsedDozerCodes(data);
+
+  return `<div class="sr-lower">
+    <div class="sr-lower-grid-dozer">
+      <div class="sr-box-merged-remarks">
+        <div class="sr-lower-title">Remarks</div>
+        <div class="sr-box-content">${buildDozerRemarksBox(data)}</div>
+      </div>
+      <div class="sr-box-production">
+        <div class="sr-prod-item"><span>ROM</span><span>-</span><span>${fmtNum(romT)} T</span></div>
+        <div class="sr-prod-item"><span>Waste</span><span>-</span><span>${fmtNum(wasteT)} T</span></div>
+        <div class="sr-prod-item"><span>Stockpile</span><span>-</span><span>${fmtNum(spT)} T</span></div>
+      </div>
+    </div>
+    <div class="sr-legend-dozer">
+      <div class="sr-legend-title">B/D Detail</div>
+      <div class="sr-legend-title">Idle Detail</div>
+      <div class="sr-legend-title sr-legend-title-remarks">Other Detail</div>
+      <div class="sr-legend-box">${legendLines(usedCodes.bd)}</div>
+      <div class="sr-legend-box">${legendLines(usedCodes.idle)}</div>
+      <div class="sr-legend-box">&nbsp;</div>
+    </div>
+    <div class="sr-signatures dozer-sigs">
+      <div><div class="sign-name">${data.icMechServices ? escapeHtml(formatName(data.icMechServices)) : '&nbsp;'}</div><div>Shift In-charge (Mech. Services)</div></div>
+      <div><div class="sign-name">${data.ic ? escapeHtml(formatName(data.ic)) : '&nbsp;'}</div><div>Shift In-charge (Mining)</div></div>
+    </div>
+  </div>`;
+}
+
+function buildDozerReportHtml(data, date, shift){
+  const filename = `Dozer-Shift-Report-${date.split('-').reverse().join('-')}-(${shiftShortLabel(+shift)}-Shift)`;
+  
+  return `<!doctype html><html><head><meta charset="UTF-8"><title>${escapeHtml(filename)}<\/title>
+    <style>${shovelReportCss()} 
+      /* Dozer specific column widths and overrides */
+      .c-dozer{width:10%;} .c-op-single{width:16%;} 
+      .c-dh{width:6%;} .c-det{width:18%;} 
+      .c-tot{width:6%;} .c-stat{width:16%;} .c-rem{width:8%;}
+      
+      /* Updated to 86% / 14% split to match Drill Report */
+      .sr-lower-grid-dozer { display:grid; grid-template-columns: 86% 14%; border-left:1px solid #000; border-top:1px solid #000; min-height: 1.1in; }
+      .sr-lower-grid-dozer > div { border-right:1px solid #000; border-bottom:1px solid #000; padding:4px 6px; display: flex; flex-direction: column; }
+      
+      /* Dozer Legend has 3 columns instead of 4 */
+      .sr-legend-dozer { margin-top:0.04in; display:grid; grid-template-columns: 20% 20% 60%; grid-template-rows:0.22in auto; border-left:1px solid #000; border-top:1px solid #000; }
+      .sr-legend-dozer > div { border-right:1px solid #000; border-bottom:1px solid #000; padding:3px 5px; }
+      
+      /* Only 2 signature blocks */
+      .dozer-sigs { grid-template-columns: 1fr 1fr; }
+      
+      /* Ensure single operator cell styling matches without the bottom dotted border */
+      .sr-operator.sr-single-op div { border-bottom: none !important; min-height: 0.36in; }
+      
+      /* Match the line spacing of the remarks box */
+      .sr-box-merged-remarks .sr-box-content { margin-top: 4px; line-height: 1.35; }
+      .sr-box-merged-remarks .sr-box-content div + div { margin-top: 1px; }
+      
+      /* Remove bold from ROM, Waste, Stockpile */
+      .sr-box-production { font-weight: normal; }
+    <\/style><\/head><body>
+      <main class="sr-page">
+        <header class="sr-header">
+          <img class="sr-logo sr-logo-left" src="${NMDC_LOGO_DATA_URI}" alt="NMDC">
+          <div class="sr-title-block">
+            <div class="sr-title sr-title-1">NMDC LIMITED<\/div>
+            <div class="sr-title sr-title-2">BAILADILA IRON ORE MINES, KIRANDUL COMPLEX<\/div>
+            <div class="sr-title sr-title-3">DOZER SHIFT REPORT<\/div>
+          <\/div>
+          <img class="sr-logo sr-logo-right" src="${GPTW_LOGO_DATA_URI}" alt="Great Place To Work Certified">
+        <\/header>
+        <section class="sr-meta">
+          <div>DATE - <span>${escapeHtml(fmtReportDate(date))}<\/span><\/div>
+          <div>SHIFT - <span>${escapeHtml(shiftShortLabel(+shift))}<\/span><\/div>
+          <div>DEPOSIT - <span>11C<\/span><\/div>
+        <\/section>
+        <table class="sr-table">
+          <colgroup>
+            <col class="c-dozer"><col class="c-op-single"><col class="c-dh"><col class="c-dh"><col class="c-dh">
+            <col class="c-det"><col class="c-tot"><col class="c-det"><col class="c-tot">
+            <col class="c-stat"><col class="c-rem">
+          <\/colgroup>
+          <thead>
+            <tr>
+              <th rowspan="2">Dozer<\/th>
+              <th rowspan="2">Operator<\/th>
+              <th rowspan="2">Sch.<br>Hrs<\/th>
+              <th rowspan="2">Avl.<br>Hrs<\/th>
+              <th rowspan="2">Utl.<br>Hrs<\/th>
+              <th colspan="2">Breakdown&nbsp; Hours<\/th>
+              <th colspan="2">Idle Hours<\/th>
+              <th rowspan="2">Location / Status @ Shift End<\/th>
+              <th rowspan="2">Remarks<\/th>
+            <\/tr>
+            <tr>
+              <th>Code / Hrs<\/th><th>Total<\/th>
+              <th>Code / Hrs<\/th><th>Total<\/th>
+            <\/tr>
+          <\/thead>
+          <tbody>${buildDozerRows(data)}${buildDozerTotalsRow(data)}<\/tbody>
+        <\/table>
+        ${lowerDozerReportHtml(data)}
+      <\/main>
+    <\/body><\/html>`;
+}
+
+function openDozerReportPreview(data, date, shift){
+  return printReportHtml(buildDozerReportHtml(data, date, shift));
+}
+
+// ═══════════════════════════════════════════════════
+// DUMPER SHIFT REPORT CONSTANTS & DATA MAPPERS
+// ═══════════════════════════════════════════════════
+
+const DUMPER_BD_SECTIONS = [
+  {code:'M-1',name:'B/D maintenance'},{code:'M-2',name:'Body'},{code:'M-3',name:'Brake'},
+  {code:'M-4',name:'Cabin'},{code:'M-5',name:'Differential'},{code:'M-6',name:'Electrical fault'},
+  {code:'M-7',name:'Engine'},{code:'M-8',name:'Major repair'},{code:'M-9',name:'Oil Leakage'},
+  {code:'M-10',name:'Others'},{code:'M-11',name:'Poor operation'},{code:'M-12',name:'Steering'},
+  {code:'M-13',name:'Suspension'},{code:'M-14',name:'Transmission'},{code:'M-15',name:'Sched. maintenance'},{code:'M-16',name:'Tyre'}
+];
+
+const DUMPER_IDLE_TYPES = [
+  {code:'I-1',name:'No operator'},{code:'I-2',name:'Plant not worked'},{code:'I-3',name:'B/D of shovel'},
+  {code:'I-4',name:'Bad weather'},{code:'I-5',name:'Shift start/End'},{code:'I-6',name:'Tea Time'},
+  {code:'I-7',name:'Blasting'},{code:'I-8',name:'Others'}
+];
+
+const WATER_SPRINKLER_IDLE_TYPES = [
+  {code:'I-1',name:'B/D of shovel'},{code:'I-2',name:'Blasting'},{code:'I-3',name:'No need to Operate'},
+  {code:'I-4',name:'No operator'},{code:'I-5',name:'Others'},{code:'I-6',name:'Shift start/End'},
+  {code:'I-7',name:'Tea Time'},{code:'I-8',name:'Wet weather'}
+];
+
+function dumperBdCodeOf(row){
+  if(!row || !row.section) return '';
+  const found = DUMPER_BD_SECTIONS.find(s=>s.name===row.section);
+  return found ? found.code : row.section;
+}
+
+function dumperIdleCodeOf(row){
+  if(!row || !row.type) return '';
+  const found = DUMPER_IDLE_TYPES.find(t=>t.name===row.type);
+  return found ? found.code : row.type;
+}
+
+function wsIdleCodeOf(row){
+  if(!row || !row.type) return '';
+  const found = WATER_SPRINKLER_IDLE_TYPES.find(t=>t.name===row.type);
+  return found ? found.code : row.type;
+}
+
+function getDumperTripsMap(data) {
+  const map = {};
+  (data.shovelRows||[]).forEach(row => {
+    (row.dumpers||[]).forEach(d => {
+      if(!d.dumper || d.dumper === 'Other') return;
+      if (!d.operator && !(+d.rom) && !(+d.waste) && !(+d.sp)) return;
+      
+      const op = d.operator || '';
+      const key = op; 
+      if(!map[d.dumper]) map[d.dumper] = {};
+      if(!map[d.dumper][key]) map[d.dumper][key] = { operator: op, rom: 0, waste: 0, sp: 0 };
+      
+      map[d.dumper][key].rom += n(d.rom);
+      map[d.dumper][key].waste += n(d.waste);
+      map[d.dumper][key].sp += n(d.sp);
+    });
+  });
+  return map;
+}
+
+function dumperMachineRows(data){
+  const dumpers = activeMachinery().filter(m => String(m.group||'').trim().toLowerCase() === 'dumper');
+  const tripMap = getDumperTripsMap(data);
+  const expandedRows = [];
+
+  dumpers.forEach(m => {
+    const machineId = m.id;
+    const md = data.machinery?.[machineId] || {};
+    const tripsByOp = tripMap[machineId];
+
+    if (!tripsByOp || Object.keys(tripsByOp).length === 0) {
+      const alloc = allocationForMachine(data, machineId);
+      expandedRows.push({
+        machineId, md, operator: alloc?.operator || '', trips: {rom:0,sp:0,waste:0}, isFirst: true
+      });
+    } else {
+      const ops = Object.values(tripsByOp).sort((a,b) => a.operator.localeCompare(b.operator));
+      ops.forEach((opData, index) => {
+        expandedRows.push({
+          machineId, md, operator: opData.operator, trips: {rom: opData.rom, sp: opData.sp, waste: opData.waste}, isFirst: (index === 0)
+        });
+      });
+    }
+  });
+  return expandedRows;
+}
+
+function waterSprinklerMachineRows(data){
+  const sprinklers = activeMachinery().filter(m => String(m.group||'').trim().toLowerCase() === 'water sprinkler');
+  return sprinklers.map(m => {
+    const machineId = m.id;
+    const md = data.machinery?.[machineId] || {};
+    const allocRow = (data.allocationRows||[]).find(r => r && r.machinery === machineId) || null;
+    return { machineId, md, operator: allocRow?.operator || '' };
+  });
+}
+
+function collectUsedDumperCodes(data){
+  const dRows = dumperMachineRows(data);
+  const wsRows = waterSprinklerMachineRows(data);
+  const bd = new Map(), idle = new Map();
+  
+  const processBD = (r) => {
+    if(!r || !r.section) return;
+    const found = DUMPER_BD_SECTIONS.find(s=>s.name===r.section);
+    const code = found ? found.code : r.section;
+    const name = found ? found.name : r.section;
+    if(!bd.has(code)) bd.set(code, name);
+  };
+
+  dRows.forEach(({md, isFirst})=>{
+    if (!isFirst) return; 
+    (md.bdRows||[]).forEach(processBD);
+    (md.idleRows||[]).forEach(r=>{
+      if(!r || !r.type) return;
+      const found = DUMPER_IDLE_TYPES.find(t=>t.name===r.type);
+      const code = found ? found.code : r.type;
+      const name = found ? found.name : r.type;
+      if(!idle.has(code)) idle.set(code, name);
+    });
+  });
+
+  wsRows.forEach(({md})=>{
+    (md.bdRows||[]).forEach(processBD);
+    (md.idleRows||[]).forEach(r=>{
+      if(!r || !r.type) return;
+      const found = WATER_SPRINKLER_IDLE_TYPES.find(t=>t.name===r.type);
+      const code = found ? found.code : r.type;
+      const name = found ? found.name : r.type;
+      if(!idle.has(code)) idle.set(code, name);
+    });
+  });
+
+  return { bd, idle };
+}
+
+// ═══════════════════════════════════════════════════
+// DUMPER SHIFT REPORT HTML GENERATORS
+// ═══════════════════════════════════════════════════
+
+function formatDumperInlineDetails(rows, codeFn) {
+  const clean = (rows || []).filter(r => r && (r.section || r.type || r.hrs || r.description));
+  if (!clean.length) return '<div class="sr-dumper-detail-grid empty"></div>';
+  return `<div class="sr-dumper-detail-grid" style="--detail-count:${Math.max(clean.length,1)}">${clean.map(r => {
+    const code = codeFn(r) || '-';
+    const hrs = fmtNum(r.hrs);
+    return `<div class="sr-dumper-inline-detail">${escapeHtml(code)} / ${escapeHtml(hrs)}</div>`;
+  }).join('')}</div>`;
+}
+
+function buildDumperRows(data){
+  const rows = dumperMachineRows(data);
+  let html = '';
+
+  if(!rows.length){
+    html += '<tr><td colspan="14" class="sr-center sr-empty-row">No Dumper machines found in the machinery master list.</td></tr>';
+  } else {
+    html += rows.map(({machineId, md, operator, trips, isFirst})=>{
+      const totalTrips = trips.rom + trips.sp + trips.waste;
+      
+      let schedHtml = '', avlHtml = '', utlHtml = '', bdHtml = '<div class="sr-dumper-detail-grid empty"></div>', bdTotalHtml = '', idleHtml = '<div class="sr-dumper-detail-grid empty"></div>', idleTotalHtml = '', remarksHtml = '';
+      
+      if (isFirst) {
+        schedHtml = escapeHtml(fmtNum(md.schedHrs ?? 8));
+        avlHtml = escapeHtml(fmtNum(md.avlHrs));
+        utlHtml = escapeHtml(fmtNum(md.utlHrs));
+        
+        const bdRows = md.bdRows || [];
+        const idleRows = md.idleRows || [];
+        const bdTotal = bdRows.reduce((s,r)=>s+n(r.hrs),0);
+        const idleTotal = idleRows.reduce((s,r)=>s+n(r.hrs),0);
+        
+        bdHtml = formatDumperInlineDetails(bdRows, dumperBdCodeOf);
+        bdTotalHtml = escapeHtml(fmtNum(bdTotal));
+        
+        idleHtml = formatDumperInlineDetails(idleRows, dumperIdleCodeOf);
+        idleTotalHtml = escapeHtml(fmtNum(idleTotal));
+        
+        const atEnd = md?.statusEnd === 'B/D' ? 'B/D' : 'OK';
+        const statusAtEnd = md?.statusAtEnd === 'Enter Manually' 
+          ? (md?.statusAtEndManual || '') 
+          : (md?.statusAtEnd || '');
+          
+        remarksHtml = escapeHtml(statusAtEnd ? `${atEnd} (${statusAtEnd})` : atEnd);
+      }
+
+      return `<tr>
+        <td class="sr-center sr-machine">${escapeHtml(machineryDisplayName(machineId))}</td>
+        <td class="sr-operator sr-single-op"><div>${escapeHtml(formatName(operator))}</div></td>
+        <td class="sr-center">${schedHtml}</td>
+        <td class="sr-center">${avlHtml}</td>
+        <td class="sr-center">${utlHtml}</td>
+        <td class="sr-center sr-stacked-cell">${bdHtml}</td>
+        <td class="sr-center">${bdTotalHtml}</td>
+        <td class="sr-center sr-stacked-cell">${idleHtml}</td>
+        <td class="sr-center">${idleTotalHtml}</td>
+        <td class="sr-center">${escapeHtml(fmtNum(trips.rom))}</td>
+        <td class="sr-center">${escapeHtml(fmtNum(trips.sp))}</td>
+        <td class="sr-center">${escapeHtml(fmtNum(trips.waste))}</td>
+        <td class="sr-center">${escapeHtml(fmtNum(totalTrips))}</td>
+        <td class="sr-remarks">${remarksHtml}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Append Water Sprinklers Section
+  const wsRows = waterSprinklerMachineRows(data);
+  if (wsRows.length > 0) {
+    html += `<tr><td colspan="14" style="text-align:left; font-weight:bold; background-color:#eaeaea; padding: 4px 6px; border-top: 2px solid #000; border-bottom: 2px solid #000;">Water sprinkler</td></tr>`;
+    html += wsRows.map(({machineId, md, operator}) => {
+      const schedHtml = escapeHtml(fmtNum(md.schedHrs ?? 8));
+      const avlHtml = escapeHtml(fmtNum(md.avlHrs));
+      const utlHtml = escapeHtml(fmtNum(md.utlHrs));
+      
+      const bdRows = md.bdRows || [];
+      const idleRows = md.idleRows || [];
+      const bdTotal = bdRows.reduce((s,r)=>s+n(r.hrs),0);
+      const idleTotal = idleRows.reduce((s,r)=>s+n(r.hrs),0);
+      
+      // Water Sprinkler shares Dumper B/D codes, but has its own Idle codes
+      const bdHtml = formatDumperInlineDetails(bdRows, dumperBdCodeOf);
+      const bdTotalHtml = escapeHtml(fmtNum(bdTotal));
+      const idleHtml = formatDumperInlineDetails(idleRows, wsIdleCodeOf);
+      const idleTotalHtml = escapeHtml(fmtNum(idleTotal));
+      
+      const atEnd = md?.statusEnd === 'B/D' ? 'B/D' : 'OK';
+      const statusAtEnd = md?.statusAtEnd === 'Enter Manually' 
+        ? (md?.statusAtEndManual || '') 
+        : (md?.statusAtEnd || '');
+      const remarksHtml = escapeHtml(statusAtEnd ? `${atEnd} (${statusAtEnd})` : atEnd);
+
+      return `<tr>
+        <td class="sr-center sr-machine">${escapeHtml(machineryDisplayName(machineId))}</td>
+        <td class="sr-operator sr-single-op"><div>${escapeHtml(formatName(operator))}</div></td>
+        <td class="sr-center">${schedHtml}</td>
+        <td class="sr-center">${avlHtml}</td>
+        <td class="sr-center">${utlHtml}</td>
+        <td class="sr-center sr-stacked-cell">${bdHtml}</td>
+        <td class="sr-center">${bdTotalHtml}</td>
+        <td class="sr-center sr-stacked-cell">${idleHtml}</td>
+        <td class="sr-center">${idleTotalHtml}</td>
+        <td class="sr-center"></td>
+        <td class="sr-center"></td>
+        <td class="sr-center"></td>
+        <td class="sr-center"></td>
+        <td class="sr-remarks">${remarksHtml}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  return html;
+}
+
+function buildDumperTotalsRow(data){
+  const rows = dumperMachineRows(data);
+  const wsRows = waterSprinklerMachineRows(data);
+  
+  const totals = {sched:0,avl:0,utl:0,bd:0,idle:0,rom:0,sp:0,waste:0};
+
+  rows.forEach(({md,trips,isFirst})=>{
+    if (isFirst) {
+      totals.sched += n(md.schedHrs ?? 8);
+      totals.avl += n(md.avlHrs);
+      totals.utl += n(md.utlHrs);
+      totals.bd += (md.bdRows||[]).reduce((s,r)=>s+n(r.hrs),0);
+      totals.idle += (md.idleRows||[]).reduce((s,r)=>s+n(r.hrs),0);
+    }
+    totals.rom += trips.rom; totals.sp += trips.sp; totals.waste += trips.waste;
+  });
+
+  wsRows.forEach(({md})=>{
+    totals.sched += n(md.schedHrs ?? 8);
+    totals.avl += n(md.avlHrs);
+    totals.utl += n(md.utlHrs);
+    totals.bd += (md.bdRows||[]).reduce((s,r)=>s+n(r.hrs),0);
+    totals.idle += (md.idleRows||[]).reduce((s,r)=>s+n(r.hrs),0);
+  });
+  
+  return `<tr class="sr-total-row">
+    <td colspan="2">Total</td>
+    <td>${fmtNum(totals.sched)}</td><td>${fmtNum(totals.avl)}</td><td>${fmtNum(totals.utl)}</td>
+    <td>Total</td><td>${fmtNum(totals.bd)}</td>
+    <td>Total</td><td>${fmtNum(totals.idle)}</td>
+    <td>${fmtNum(totals.rom)}</td><td>${fmtNum(totals.sp)}</td><td>${fmtNum(totals.waste)}</td><td>${fmtNum(totals.rom+totals.sp+totals.waste)}</td>
+    <td></td>
+  </tr>`;
+}
+
+function buildDumperRemarksBox(data){
+  const lines = [];
+  const lineKeys = new Set();
+  const addLine = (text) => {
+    const clean = String(text ?? '').trim();
+    if(!clean) return;
+    const key = clean.toLowerCase();
+    if(lineKeys.has(key)) return;
+    lineKeys.add(key);
+    lines.push(clean);
+  };
+
+  const processRemarks = ({machineId, md, isFirst}) => {
+    if (isFirst === false) return; 
+    const segments = [];
+    const segKeys = new Set();
+    const addSeg = (text) => {
+      const clean = String(text ?? '').trim();
+      if(!clean) return;
+      const key = clean.toLowerCase();
+      if(segKeys.has(key)) return;
+      segKeys.add(key);
+      segments.push(clean);
+    };
+    (md.bdRows || []).forEach(r => {
+      const desc = String(r?.description || '').trim();
+      if(!desc) return;
+      const status = String(r?.status || '').trim();
+      addSeg(status ? `${desc}, ${status}` : desc);
+    });
+    addSeg(md.remarks);
+    if(!segments.length) return;
+    addLine(`${machineryDisplayName(machineId)} - ${segments.join(' | ')}`);
+  };
+
+  dumperMachineRows(data).forEach(processRemarks);
+  waterSprinklerMachineRows(data).forEach(processRemarks);
+
+  // Match Drill logic: Pull ONLY from "Work Done and Remarks", excluding "Other Information"
+  [data.workDoneAndRemarks?.dumperAndWaterSprinkler].forEach(src => {
+    String(src || '').split(/\r?\n/).forEach(addLine);
+  });
+
+  if(!lines.length) return '&nbsp;';
+  return lines.map(l => `<div>&#8226; ${escapeHtml(l)}</div>`).join('');
+}
+
+function lowerDumperReportHtml(data){
+  const romT = data.production?.rom || 0;
+  const wasteT = data.production?.waste || 0;
+  const spT = data.production?.stockpile || data.production?.sp || 0;
+  
+  const usedCodes = collectUsedDumperCodes(data);
+
+  return `<div class="sr-lower">
+    <div class="sr-lower-grid-drill">
+      <div class="sr-box-merged-remarks">
+        <div class="sr-lower-title">Remarks</div>
+        <div class="sr-box-content">${buildDumperRemarksBox(data)}</div>
+      </div>
+      <div class="sr-box-production">
+        <div class="sr-prod-item"><span>ROM</span><span>-</span><span>${fmtNum(romT)} T</span></div>
+        <div class="sr-prod-item"><span>Waste</span><span>-</span><span>${fmtNum(wasteT)} T</span></div>
+        <div class="sr-prod-item"><span>Stockpile</span><span>-</span><span>${fmtNum(spT)} T</span></div>
+      </div>
+    </div>
+    <div class="sr-legend-dumper">
+      <div class="sr-legend-title">B/D Detail</div>
+      <div class="sr-legend-title">Idle Detail</div>
+      <div class="sr-legend-title sr-legend-title-remarks">Other Detail</div>
+      <div class="sr-legend-box">${legendLines(usedCodes.bd)}</div>
+      <div class="sr-legend-box">${legendLines(usedCodes.idle)}</div>
+      <div class="sr-legend-box">&nbsp;</div>
+    </div>
+    <div class="sr-signatures dozer-sigs">
+      <div><div class="sign-name">${data.icMechServices ? escapeHtml(formatName(data.icMechServices)) : '&nbsp;'}</div><div>Shift In-charge (Mech. Services)</div></div>
+      <div><div class="sign-name">${data.ic ? escapeHtml(formatName(data.ic)) : '&nbsp;'}</div><div>Shift In-charge (Mining)</div></div>
+    </div>
+  </div>`;
+}
+
+function buildDumperReportHtml(data, date, shift){
+  const filename = `Dumper-Shift-Report-${date.split('-').reverse().join('-')}-(${shiftShortLabel(+shift)}-Shift)`;
+  
+  return `<!doctype html><html><head><meta charset="UTF-8"><title>${escapeHtml(filename)}<\/title>
+    <style>${shovelReportCss()} 
+      .c-dumper{width:7%;} 
+      /* Match single op cell styling from Dozer */
+      .sr-operator.sr-single-op div { border-bottom: none !important; min-height: 0.17in; }
+      
+      /* Decrease overall table row height for Dumper report */
+      .sr-table tbody tr { height: 0.17in; }
+      
+      /* Dumper Legend has 3 columns (matches Dozer format) */
+      .sr-legend-dumper { margin-top:0.04in; display:grid; grid-template-columns: 20% 20% 60%; grid-template-rows:0.22in auto; border-left:1px solid #000; border-top:1px solid #000; }
+      .sr-legend-dumper > div { border-right:1px solid #000; border-bottom:1px solid #000; padding:3px 5px; }
+      
+      /* Use Drill lower grid sizes (86% / 14%) */
+      .sr-lower-grid-drill { display:grid; grid-template-columns: 86% 14%; border-left:1px solid #000; border-top:1px solid #000; min-height: 0.4in; }
+      .sr-lower-grid-drill > div { border-right:1px solid #000; border-bottom:1px solid #000; padding:4px 6px; display: flex; flex-direction: column; }
+      
+      /* Decrease minimum height of the legend / Other Detail box for Dumper report */
+      .sr-legend-dumper .sr-legend-box { min-height: 0.4in; }
+
+      /* Re-use Dozer Signatures */
+      .dozer-sigs { grid-template-columns: 1fr 1fr; }
+      .sr-box-merged-remarks .sr-box-content { margin-top: 4px; line-height: 1.35; }
+      .sr-box-merged-remarks .sr-box-content div + div { margin-top: 1px; }
+      .sr-box-production { font-weight: normal; }
+
+      /* Dumper inline B/D and Idle Details styling (Vertical Dotted Separators) */
+      .sr-dumper-detail-grid { display: grid; grid-template-columns: repeat(var(--detail-count), minmax(0,1fr)); min-height: 0.17in; height: 100%; }
+      .sr-dumper-detail-grid.empty { min-height: 0.17in; }
+      .sr-dumper-inline-detail { display: flex; align-items: center; justify-content: center; padding: 2px; text-align: center; }
+      .sr-dumper-inline-detail + .sr-dumper-inline-detail { border-left: 1px dotted #000; }
+    <\/style><\/head><body>
+      <main class="sr-page">
+        <header class="sr-header">
+          <img class="sr-logo sr-logo-left" src="${NMDC_LOGO_DATA_URI}" alt="NMDC">
+          <div class="sr-title-block">
+            <div class="sr-title sr-title-1">NMDC LIMITED<\/div>
+            <div class="sr-title sr-title-2">BAILADILA IRON ORE MINES, KIRANDUL COMPLEX<\/div>
+            <div class="sr-title sr-title-3">DUMPER SHIFT REPORT<\/div>
+          <\/div>
+          <img class="sr-logo sr-logo-right" src="${GPTW_LOGO_DATA_URI}" alt="Great Place To Work Certified">
+        <\/header>
+        <section class="sr-meta">
+          <div>DATE - <span>${escapeHtml(fmtReportDate(date))}<\/span><\/div>
+          <div>SHIFT - <span>${escapeHtml(shiftShortLabel(+shift))}<\/span><\/div>
+          <div>DEPOSIT - <span>11C<\/span><\/div>
+        <\/section>
+        <table class="sr-table">
+          <colgroup>
+            <col class="c-dumper"><col class="c-operator"><col class="c-hour"><col class="c-hour"><col class="c-hour">
+            <col class="c-detail"><col class="c-total"><col class="c-detail"><col class="c-total">
+            <col class="c-trip"><col class="c-trip"><col class="c-trip"><col class="c-trip"><col class="c-remarks">
+          <\/colgroup>
+          <thead>
+            <tr>
+              <th rowspan="2">Dumper<\/th>
+              <th rowspan="2">Name of Operator<\/th>
+              <th rowspan="2">Sch.<br>Hrs<\/th>
+              <th rowspan="2">Avl.<br>Hrs<\/th>
+              <th rowspan="2">Utl.<br>Hrs<\/th>
+              <th colspan="2">Breakdown&nbsp; Hours<\/th>
+              <th colspan="2">Idle Hours<\/th>
+              <th colspan="4">Output Trips<\/th>
+              <th rowspan="2">Remarks<\/th>
+            <\/tr>
+            <tr>
+              <th>Code / Hrs<\/th><th>Total<\/th>
+              <th>Code / Hrs<\/th><th>Total<\/th>
+              <th>ROM<\/th><th>SP<\/th><th>Waste<\/th><th>Total<\/th>
+            <\/tr>
+          <\/thead>
+          <tbody>${buildDumperRows(data)}${buildDumperTotalsRow(data)}<\/tbody>
+        <\/table>
+        ${lowerDumperReportHtml(data)}
+      <\/main>
+    <\/body><\/html>`;
+}
+
+function openDumperReportPreview(data, date, shift){
+  return printReportHtml(buildDumperReportHtml(data, date, shift));
+}
+
+// ═══════════════════════════════════════════════════
+// LOADING OVERLAY
+// ═══════════════════════════════════════════════════
+function showLoadingScreen(){const ov=document.getElementById('loading-overlay');if(ov)ov.style.display='flex';}
+function hideLoadingScreen(){const ov=document.getElementById('loading-overlay');if(ov)ov.style.display='none';}
+
+// ═══════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════
+function mkEl(tag,cls,id){const el=document.createElement(tag);if(cls)el.className=cls;if(id)el.id=id;return el;}
+function showToast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} on`;setTimeout(()=>t.className='toast',3200);}
+
+</script>
+<!-- ─── VANTA BACKGROUND ─── -->
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.VANTA) {
+      window.VANTA.FOG({
+        el: "#vanta-bg",
+        mouseControls: true,
+        touchControls: true,
+        gyroControls: false,
+        minHeight: 200.00,
+        minWidth: 200.00,
+        highlightColor: 0x0d0f14,
+        midtoneColor: 0xffffff,
+        lowlightColor: 0x181e2a,
+        baseColor: 0x0d0f14,
+        blurFactor: 0.48,
+        speed: 0.20,
+        zoom: 0.15
+      });
+    }
+  });
+</script>
+</body>
+</html>
+
+</body>
+</html>
