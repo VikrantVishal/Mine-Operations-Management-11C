@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Deposit 11C shift reporting — Manpower</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style1.css">
+<!-- Preload background engine scripts as early as possible so the animated
+     background is ready with no flash/delay once the page paints -->
+<link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js" as="script">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.fog.min.js" as="script">
+<!-- Loaded with "defer" so the browser starts fetching them immediately in parallel -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.fog.min.js"></script>
+
+<style>
+  /* Sidebar user badge (replaces the static "Mining Operations Tracker" tagline) */
+  .sb-user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .sb-user-row .user-badge-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sb-user-row .admin-tag {
+    font-size: 9px;
+    font-weight: 700;
+    color: #000;
+    background: var(--accent);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 4px;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+  }
+  .sb-user-row .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    padding: 3px 10px;
+    border-radius: var(--r);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: all 0.18s;
+    flex-shrink: 0;
+  }
+  .sb-user-row .btn-outline:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+
+<div id="vanta-bg"></div>
+<div class="sbo" id="sbo" onclick="closeSB()"></div>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="sb-head">
+    <h2>🌱Deposit 11C🌱</h2>
+    <div class="sb-user-row" id="sidebarUserBadge"></div>
+  </div>
+  <div class="sb-fixed">
+    <div class="sb-section">Reports</div>
+    <div class="sb-tile" id="sb-daily" onclick="setReport('daily')"><span class="icon">📋</span>Daily Report</div>
+    <div class="sb-tile" id="sb-cumul" onclick="setReport('cumul')"><span class="icon">📊</span>Cumulative Report</div>
+    <div class="sb-tile" onclick="location.href='shift-report.html'"><span class="icon">🧾</span>Shift Report Generator</div>
+    <div class="sb-tile" onclick="location.href='allocation-register.html'"><span class="icon">📑</span>Allocation Register</div>
+    <div class="sb-section">Master Data</div>
+    <div class="sb-tile" onclick="goResources()"><span class="icon">📁</span>Resources (Master List)</div>
+
+    <!-- SHIFT TOGGLE -->
+    <div class="sb-section">View</div>
+    <div class="toggle-row">
+      <div><div class="toggle-lbl">Light / Dark</div><div class="toggle-sub" id="theme-toggle-lbl">Dark theme enabled</div></div>
+      <label class="ts"><input type="checkbox" id="theme-toggle" onchange="onThemeToggle()"><span class="ts-slider"></span></label>
+    </div>
+  </div>
+
+  <!-- DATE LOG — the only part of the sidebar that scrolls -->
+  <div class="sb-log-wrap">
+    <div class="sb-section">Report Log</div>
+    <div class="sb-scroll" id="date-log"></div>
+  </div>
+
+  <div class="sb-foot">
+    <div class="sb-credit">Designed and managed by Vikrant Vishal 😎</div>
+  </div>
+</div>
+
+<!-- APP HEADER (unified with main-menu.html / Attendance Portal) -->
+<header class="app-header">
+  <div class="header-top">
+    <div class="titles">
+      <button class="menu-btn" onclick="toggleSB()" aria-label="Open menu">☰</button>
+      <div class="logo-icon">📝</div>
+      <div>
+        <h1>DEPOSIT 11C</h1>
+        <div class="sub">Mining Operations</div>
+      </div>
+    </div>
+    <div class="home-date-group">
+      <a class="home-btn" href="index.html" title="Home" aria-label="Back to Home">🏠</a>
+      <!-- Moved datetime-chip here -->
+      <div class="datetime-chip">
+        <div class="time" id="clock">--:--</div>
+        <div id="topdate">--</div>
+      </div>
+    </div>
+  </div>
+  <div class="header-bottom">
+    <!-- <div id="sync-dot" class="sync-dot"></div> -->
+  </div>
+</header>
+
+<!-- SHIFT BANNER -->
+<div id="shift-banner">
+  <div class="sb-item"><span class="sb-label"></span>&nbsp;<span class="sb-val" id="bn-date">—</span></div>
+  <span class="sb-sep">·</span>
+  <div class="sb-item"><span id="bn-shift" class="sb-val sshift-badge ss1">—</span></div>
+  <span class="sb-sep">·</span>
+  <div class="sb-item"><span class="sb-label">I/C-</span>&nbsp;<span class="sb-val" id="bn-ic">—</span></div>
+</div>
+
+<!-- APP BODY -->
+<div id="app-body">
+  <div class="tabs-wrap" id="tabs-wrap"></div>
+  <div id="tab-content"></div>
+
+<div class="toast" id="toast"></div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" style="display:flex;position:fixed;inset:0;background:rgba(10,14,20,0.92);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;color:#f5a623;letter-spacing:1px">🌱Deposit 11C🌱</div>
+  <div style="font-size:13px;color:#6a8099">Loading data...</div>
+  <div style="width:48px;height:48px;border:3px solid #243040;border-top-color:#f5a623;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</div>
+
+<!-- FIREBASE (Firestore) — shared config with the Deposit-11C Attendance System -->
+<script type="module">
+  import {
+    db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp,
+    attendanceDocId, esc, STATUS_COLORS, sortGroups
+  } from "./firebase-config.js";
+  import { requireAuth, renderUserBadge } from "./auth.js";
+  // Same login/session system used by Attendance Management. If nobody is
+  // signed in this redirects to login.html?redirect=manpower.html(+query),
+  // preserving ?auto=1 so the user lands back on the exact page after login.
+  window.__d11cAuthed = !!requireAuth();
+  // Populate the sidebar with the signed-in user's name + a Logout button.
+  // renderUserBadge() is the exact same function main-menu.html uses, so the
+  // displayed name (from the active session) and the Logout behaviour
+  // (session clear + redirect to login.html) are identical to the rest of
+  // the portal — nothing here is hard-coded.
+  if (window.__d11cAuthed) {
+    renderUserBadge('sidebarUserBadge');
+    // Prefix the sidebar's user name with 👤 without touching auth.js's
+    // shared renderUserBadge() (used unchanged on other pages).
+    const sbNameEl = document.querySelector('#sidebarUserBadge .user-badge-name');
+    if (sbNameEl) sbNameEl.prepend('👤 ');
+  }
+  window.fb = { db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp, attendanceDocId, esc, STATUS_COLORS, sortGroups };
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════
+const SHIFT_NAMES = {1:'First Shift',2:'Second Shift',3:'Night Shift'};
+const MP_ROLES = ['Executive','Shovel Operator','Dumper Operator','Drill Operator','Dozer Operator','Driver','Field Attendant','Trainee','Other'];
+const MACH_CATS = ['Shovel','Dumper','Drill','Water Sprinkler','Dozer','Light Vehicle','Other'];
+const STRATA = ['Very Hard','Hard','Medium','Soft'];
+const SAVE_TABS = ['manpower','production','drilling','machinery','allocation','remarks'];
+// Tab order: Overview, Manpower, Allocation, Production, Drilling, Machinery, Remarks
+const TAB_ORDER = ['overview','manpower','allocation','production','drilling','machinery','remarks'];
+const TAB_LABELS = {overview:'Overview',manpower:'Manpower',allocation:'Allocation',production:'Production',drilling:'Drilling',machinery:'Machinery',remarks:'Remarks'};
+// Maps each daily-report tab to the standalone page that now holds it
+// (this app used to be a single-page tool with in-page tab switching;
+// each tab now lives in its own HTML file, linked here).
+const PAGE_URLS = {overview:'overview.html',manpower:'manpower.html',allocation:'allocation.html',production:'production.html',drilling:'drilling.html',machinery:'machinery.html',remarks:'remarks.html'};
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let state = { report:'daily', currentTab:'manpower', editMode:{}, photos:[], machPhotos:{} };
+let machCatFilter = 'all';
+let isLightTheme = false;
+
+// ═══════════════════════════════════════════════════
+// STORAGE HELPERS (local — UI preferences only, e.g. theme
+// and which date/shift is currently open. All report data
+// and master lists live in Firestore, never in localStorage.)
+// ═══════════════════════════════════════════════════
+const ls = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e) { return null; } };
+const ss = (k,v) => localStorage.setItem(k, JSON.stringify(v));
+isLightTheme = ls('theme_mode') === 'light';
+
+// ═══════════════════════════════════════════════════
+// FIREBASE (Firestore) DATA LAYER
+// Same Firebase project/config as the Deposit-11C Attendance
+// System (see firebase-config.js). Collections used here:
+//   shiftReports/{date}_shift{n}  — one doc per date+shift, holds the full shift report
+//   machinery/{machineryId}       — machinery master list; the Machinery ID is the doc ID (permanent unique identifier)
+//   manpower/{employeeId}         — manpower master list
+// ═══════════════════════════════════════════════════
+function fbCol(name){ return window.fb.collection(window.fb.db, name); }
+function fbDocRef(name,id){ return window.fb.doc(window.fb.db, name, String(id)); }
+
+
+// Bundled defaults — used only to seed Firestore the very first time
+// the app is opened against an empty database.
+// Bundled defaults — used only to seed Firestore the very first time
+// the app is opened against an empty database.
+// const DEFAULT_RESOURCES = {
+//   manpower:[
+//     {id:1,name:'Prashant Raut',role:'Executive'},
+//     {id:2,name:'Rajesh Sharma',role:'Executive'},
+//     {id:3,name:'Ravi Kumar',role:'Shovel Operator'},
+//     {id:4,name:'Amit Singh',role:'Dumper Operator'},
+//     {id:5,name:'Suresh Yadav',role:'Drill Operator'},
+//     {id:6,name:'Manoj Tiwari',role:'Dozer Operator'},
+//     {id:7,name:'Prakash Jha',role:'Driver'},
+//     {id:8,name:'Rakesh Kumar',role:'Field Attendant'},
+//     {id:9,name:'Anil Verma',role:'Trainee'},
+//   ],
+//   machinery:[
+//     {id:'ES20',cat:'Shovel'},{id:'ES21',cat:'Shovel'},{id:'ES23',cat:'Shovel'},
+//     {id:'HS27',cat:'Shovel'},{id:'FEL1A',cat:'Shovel'},{id:'RBS2',cat:'Shovel'},
+//     {id:'IDM4A',cat:'Drill'},{id:'IDM5A',cat:'Drill'},{id:'IDM7',cat:'Drill'},
+//     {id:'BD17',cat:'Drill'},{id:'THD2',cat:'Drill'},
+//     {id:'KD55',cat:'Dumper'},{id:'KD56',cat:'Dumper'},{id:'KD57',cat:'Dumper'},
+//     {id:'KD58',cat:'Dumper'},{id:'KD62',cat:'Dumper'},{id:'KD63',cat:'Dumper'},
+//     {id:'KD64',cat:'Dumper'},{id:'KD65',cat:'Dumper'},
+//     {id:'K2C',cat:'Dozer'},{id:'MG5',cat:'Dozer'},{id:'K8',cat:'Dozer'},
+//     {id:'PD2',cat:'Dozer'},{id:'K11',cat:'Dozer'},{id:'MG10',cat:'Dozer'},{id:'K10',cat:'Dozer'},
+//     {id:'Force-0669',cat:'Light Vehicle'},{id:'Bolero-5642',cat:'Light Vehicle'},
+//     {id:'Bolero-5641',cat:'Light Vehicle'},{id:'Force-5651',cat:'Light Vehicle'},
+//     {id:'WaterSprinkler-7',cat:'Water Sprinkler'},{id:'DieselBowser',cat:'Other'},
+//   ]
+// };
+
+
+// ═══════════════════════════════════════════════════
+// RESOURCES (Manpower & Machinery master lists — Firestore)
+// ═══════════════════════════════════════════════════
+let resources = { manpower:[], machinery:[] };
+
+async function loadResources(){
+  try{
+    const [mpSnap, machSnap] = await Promise.all([
+      window.fb.getDocs(fbCol('manpower')),
+      window.fb.getDocs(fbCol('machinery'))
+    ]);
+    let manpower = []; mpSnap.forEach(d=>{ const n=Number(d.id); manpower.push({ id: Number.isFinite(n)?n:d.id, ...d.data() }); });
+    let machinery = []; machSnap.forEach(d=>machinery.push({ id: d.id, ...d.data() }));
+
+    if(!manpower.length && !machinery.length){
+      // First run against an empty database — seed Firestore with the bundled defaults.
+      manpower = DEFAULT_RESOURCES.manpower;
+      machinery = DEFAULT_RESOURCES.machinery;
+      await Promise.all([
+        ...manpower.map(m => window.fb.setDoc(fbDocRef('manpower', m.id), { name:m.name, role:m.role })),
+        ...machinery.map(m => window.fb.setDoc(fbDocRef('machinery', m.id), { cat:m.cat }))
+      ]);
+    }
+    resources = { manpower, machinery };
+  }catch(e){
+    console.warn('Failed to load resources from Firestore, using bundled defaults', e);
+    resources = { manpower: DEFAULT_RESOURCES.manpower.slice(), machinery: DEFAULT_RESOURCES.machinery.slice() };
+  }
+}
+
+
+// ═══════════════════════════════════════════════════
+// SHIFT DATA
+// ═══════════════════════════════════════════════════
+function today() { return new Date().toISOString().split('T')[0]; }
+function getShiftDate() { return ls('shift_date') || today(); }
+function getShiftNum() { return ls('shift_num') || 1; }
+function getCurrentKey() { return `${getShiftDate()}_shift${getShiftNum()}`; }
+
+// Maps this app's shift numbers (1/2/3) to the Attendance System's shift
+// keys ('first'/'second'/'night'), used to look up the "attendance"
+// collection written by mark-attendance.html.
+const SHIFT_KEY_BY_NUM = { 1: 'first', 2: 'second', 3: 'night' };
+
+function defaultSD() {
+  return {
+    date:getShiftDate(), shift:getShiftNum(), ic:'', saved:false,
+    tabSaved:{}, // which tabs have been saved
+    attendance:{}, attendanceRemarks:{},
+    otPersonnel:[], othersPersonnel:[],
+    production:{rom:'',waste:'',sp:'',firstHour:'',lastHour:'',affectedBy:[''],plantStoppage:['']},
+    shovelRows:[], dumperRows:[],
+    drillRows:[], drillSummary:{totalM:0,totalH:0},
+    machinery:{},
+    remarksWork:'', remarksOther:'',
+    photos:[], machPhotos:{}
+  };
+}
+
+
+let SD = {};
+
+async function loadSD() {
+  const id = getCurrentKey();
+  try{
+    const snap = await window.fb.getDoc(fbDocRef('shiftReports', id));
+    SD = snap.exists() ? snap.data() : defaultSD();
+  }catch(e){
+    console.warn('Failed to load shift report from Firestore', e);
+    SD = defaultSD();
+  }
+  state.photos = SD.photos || [];
+  state.machPhotos = SD.machPhotos || {};
+}
+async function saveSD() {
+  SD.photos = state.photos;
+  SD.machPhotos = state.machPhotos;
+  SD.saved = true;
+  try{
+    await window.fb.setDoc(fbDocRef('shiftReports', getCurrentKey()), SD);
+    return true;
+  }catch(e){
+    console.warn('Failed to save shift report to Firestore', e);
+    return false;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════
+// ATTENDANCE (read from the "attendance" collection —
+// the same records mark-attendance.html submits. This tab
+// never writes attendance itself, only reads it.)
+// ═══════════════════════════════════════════════════
+let attendanceDoc = null; // { date, shift, entries:{empId:{status,name,group,...}}, otEntries:{...}, comments, submittedBy, ... } or null if not yet submitted
+
+async function loadAttendanceData() {
+  const shiftKey = SHIFT_KEY_BY_NUM[getShiftNum()] || 'first';
+  const id = window.fb.attendanceDocId(getShiftDate(), shiftKey);
+  try {
+    const snap = await window.fb.getDoc(window.fb.doc(window.fb.db, 'attendance', id));
+    attendanceDoc = snap.exists() ? snap.data() : null;
+  } catch (e) {
+    console.warn('Failed to load attendance data from Firestore', e);
+    attendanceDoc = null;
+  }
+}
+
+// Executives who were marked Present (normal duty, not OT) in the
+// loaded attendance record — the only eligible Shift In-charge candidates.
+function presentExecutives() {
+  if (!attendanceDoc) return [];
+  const list = [];
+  Object.entries(attendanceDoc.entries || {}).forEach(([id, e]) => {
+    const isExec = String(e.group || '').trim().toUpperCase() === 'EXECUTIVE';
+    const isPresent = e.status === 'Present' || e.status === 'Present (Mutual)';
+    if (isExec && isPresent) list.push({ id, name: e.name });
+  });
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  return list;
+}
+
+// Debounced auto-save to Firestore (Firestore's own offline persistence,
+// enabled in firebase-config.js, keeps this instant and safe even offline).
+let _autoSaveTimer = null;
+function autoSave(){
+  showSyncDot('saving');
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(async ()=>{
+    const ok = await saveSD();
+    showSyncDot(ok?'ok':'err');
+  }, 1500);
+}
+
+function showSyncDot(state){
+  const dot = document.getElementById('sync-dot');
+  if(!dot) return;
+  dot.className = 'sync-dot ' + state;
+  if(state==='ok'||state==='err') setTimeout(()=>{ dot.className='sync-dot'; }, 2000);
+}
+
+
+function fmtDateWithDay(dateInput) {
+  const d = typeof dateInput === 'string' ? new Date(dateInput+'T00:00:00') : new Date(dateInput);
+  const main = d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const day = d.toLocaleDateString('en-IN',{weekday:'short'});
+  return `${main} (${day})`;
+}
+
+
+// ═══════════════════════════════════════════════════
+// CLOCK & INIT
+// ═══════════════════════════════════════════════════
+function tickClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent = n.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+  document.getElementById('topdate').textContent = fmtDateWithDay(n);
+}
+setInterval(tickClock,1000); tickClock();
+
+
+// Was window.onload — that event waits for EVERY resource on the page to
+// finish (Three.js, Vanta fog, both Google Fonts stylesheets, etc). On a
+// slow/flaky mobile connection any one of those decorative assets can stall
+// or fail, so 'load' fires very late or not at all, and the app looked like
+// it "failed to load" (no spinner either, since showLoadingScreen() only
+// ran inside this same handler). The real app only depends on the DOM
+// being parsed and the auth module (which is deferred, so it has already
+// run) — so it now starts on DOMContentLoaded instead, independent of the
+// background/fonts. initApp() is also called immediately below in case
+// DOMContentLoaded has already fired by the time this script runs.
+async function initApp() {
+  if (window.__appInitStarted) return; // guard against double-init
+  window.__appInitStarted = true;
+  if (!window.__d11cAuthed) return; // not signed in — requireAuth() is already redirecting to login.html
+  applyTheme();
+  showLoadingScreen();
+  document.getElementById('sb-daily').classList.toggle('on', true);
+  document.getElementById('sb-cumul').classList.toggle('on', false);
+  try {
+  await loadResources();   // manpower + machinery master lists from Firestore
+  await loadSD();          // current date/shift's report from Firestore
+  await loadAttendanceData(); // current date/shift's attendance, from mark-attendance.html
+  buildTabs();
+  updateBanner();
+  await renderDateLog();
+  renderTab('manpower');
+  } catch (e) {
+    showToast('Failed to load: ' + e.message, 'err');
+  }
+  hideLoadingScreen();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  // DOMContentLoaded already fired before this script ran
+  initApp();
+}
+
+// Manual "Refresh from Cloud" — re-pulls resources + the currently open
+// report + the sidebar report log from Firestore.
+async function manualRefresh(){
+  showLoadingScreen();
+  try{
+    await loadResources();
+    await loadSD();
+    await loadAttendanceData();
+    updateBanner();
+    buildTabs();
+    await renderDateLog();
+    renderTab(state.currentTab);
+    showToast('Refreshed from cloud ✓','ok');
+  }catch(e){
+    showToast('Refresh failed: '+e.message,'err');
+  }
+  hideLoadingScreen();
+  closeSB();
+}
+
+// ═══════════════════════════════════════════════════
+// TABS / NAVIGATION
+// (each daily-report tab is now its own page; the tab strip
+// links between them instead of switching in-page)
+// ═══════════════════════════════════════════════════
+function buildTabs() {
+  const tw = document.getElementById('tabs-wrap');
+  tw.innerHTML = '';
+  TAB_ORDER.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'tab-btn' + (t===state.currentTab?' active':'') + (SD.tabSaved?.[t]?' saved-tab':'');
+    b.textContent = TAB_LABELS[t] || t;
+    b.onclick = () => goTab(PAGE_URLS[t]);
+    tw.appendChild(b);
+  });
+}
+// Flushes any in-progress edits to Firestore before leaving this page,
+// so switching tabs never loses an unsaved keystroke (the old in-page
+// tab switch kept everything in memory only; a real page navigation does not).
+async function goTab(url) {
+  collectCurrentTab();
+  await saveSD();
+  location.href = url;
+}
+function renderTab(name) {
+  const c = document.getElementById('tab-content');
+  c.innerHTML = '';
+  renderManpower(c);
+}
+
+function toggleSB() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sbo').classList.toggle('on'); }
+function closeSB() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbo').classList.remove('on'); }
+
+function setReport(r) {
+  if (r === 'cumul') location.href = 'cumulative.html';
+  else location.href = 'overview.html';
+}
+function goResources() {
+  location.href = 'resources.html';
+}
+
+// ═══════════════════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════════════════
+function applyTheme() {
+  document.body.classList.toggle('light-theme', isLightTheme);
+  const tg = document.getElementById('theme-toggle');
+  if(tg) tg.checked = isLightTheme;
+  const lbl = document.getElementById('theme-toggle-lbl');
+  if(lbl) lbl.textContent = isLightTheme ? 'Light theme enabled' : 'Dark theme enabled';
+}
+function onThemeToggle() {
+  isLightTheme = document.getElementById('theme-toggle').checked;
+  ss('theme_mode', isLightTheme ? 'light' : 'dark');
+  applyTheme();
+}
+
+
+// ═══════════════════════════════════════════════════
+// DATE LOG (sidebar)
+// ═══════════════════════════════════════════════════
+async function renderDateLog() {
+  const el = document.getElementById('date-log');
+  if(!el) return;
+  el.innerHTML = '<div style="padding:10px 16px;font-size:12px;color:var(--muted2)">Loading…</div>';
+
+  // scan last 30 days
+  const days = [];
+  for(let i=0;i<30;i++) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    days.push(d.toISOString().split('T')[0]);
+  }
+  const cutoff = days[days.length-1];
+
+  // {date: {1:{tabSaved,finalSubmitted}, 2:..., 3:...}}
+  const byDate = {};
+  try{
+    const q = window.fb.query(fbCol('shiftReports'), window.fb.where('date','>=',cutoff));
+    const snap = await window.fb.getDocs(q);
+    snap.forEach(d => {
+      const data = d.data();
+      if(!data.date) return;
+      byDate[data.date] = byDate[data.date] || {};
+      byDate[data.date][data.shift] = {
+        tabSaved: data.tabSaved || {},
+        finalSubmitted: !!data.finalSubmitted
+      };
+    });
+  }catch(e){
+    console.warn('Failed to load report log from Firestore', e);
+  }
+
+  let html = '';
+  days.forEach(date => {
+    const shifts = [1,2,3];
+    let hasAny = false;
+    let shiftHtml = '';
+    shifts.forEach(s => {
+      const entry = byDate[date] && byDate[date][s];
+      let cls = 'ls-empty', lbl = SHIFT_NAMES[s].replace(' Shift','');
+      if(entry){
+        const anyTabSaved = SAVE_TABS.some(t=>entry.tabSaved?.[t]);
+        const allTabsSaved = SAVE_TABS.every(t=>entry.tabSaved?.[t]);
+        if(anyTabSaved) hasAny = true;
+        if(anyTabSaved && entry.finalSubmitted && allTabsSaved) cls = 'ls-saved';       // 🟢 all tabs + Final Submit done
+        else if(anyTabSaved) cls = 'ls-partial';                                        // 🟡 some tabs saved, not finalized
+        // else: no tab saved yet → stays 'ls-empty' (⚪), even if the doc exists
+      }
+      shiftHtml += `<span class="log-shift ${cls}" onclick="loadDateShift('${date}',${s})">${lbl}</span>`;
+    });
+    if(hasAny || date===today()) {
+      const df = new Date(date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+      html += `<div class="log-item"><div class="log-date">${df}</div><div class="log-shifts">${shiftHtml}</div></div>`;
+    }
+  });
+  el.innerHTML = html || '<div style="padding:10px 16px;font-size:12px;color:var(--muted2)">No saved reports yet</div>';
+}
+async function loadDateShift(date, shift) {
+  ss('shift_date',date); ss('shift_num',shift);
+  closeSB();
+  location.reload();
+}
+
+
+// ═══════════════════════════════════════════════════
+// BANNER
+// ═══════════════════════════════════════════════════
+function updateBanner() {
+  const d = getShiftDate();
+  const s = getShiftNum();
+  const df = fmtDateWithDay(d);
+  document.getElementById('bn-date').textContent = df;
+  const bs = document.getElementById('bn-shift');
+  bs.textContent = SHIFT_NAMES[s];
+  bs.className = `sb-val sshift-badge ss${s}`;
+  document.getElementById('bn-ic').textContent = SD.ic || '—';
+}
+
+
+// ═══════════════════════════════════════════════════
+// EDIT BAR
+// ═══════════════════════════════════════════════════
+function editBar(tab, c) {
+  if(!SD.tabSaved?.[tab]) return;
+  const div = mkEl('div','edit-bar');
+  const isEdit = state.editMode[tab];
+  div.innerHTML = `<span>${isEdit?'Editing — save when done':'Report saved for this tab'}</span>
+    <button class="btn ${isEdit?'btn-green':'btn-ghost'} btn-sm" onclick="toggleEdit('${tab}')">${isEdit?'✓ Done':'✏️ Edit'}</button>`;
+  c.appendChild(div);
+}
+function toggleEdit(tab) { state.editMode[tab] = !state.editMode[tab]; renderTab(tab); }
+function isEditable(tab) { return !SD.tabSaved?.[tab] || !!state.editMode[tab]; }
+
+
+// ═══════════════════════════════════════════════════
+// COLLECT CURRENT TAB DATA (reads whichever of this tab's own
+// fields are present in the DOM into SD; harmless no-ops for
+// fields that live on a different page)
+// ═══════════════════════════════════════════════════
+function collectCurrentTab() {
+  const get = id => document.getElementById(id)?.value;
+  // Date & Shift live on the Overview page; Shift In-charge lives here.
+  // Each is picked up independently so this works no matter which of
+  // those fields is present on the current page.
+  const dv=get('sd-date'), sv=get('sd-shift'), iv=get('sd-ic');
+  if(dv){ss('shift_date',dv);SD.date=dv;}
+  if(sv){ss('shift_num',+sv);SD.shift=+sv;}
+  if(iv!==undefined){ss('shift_ic',iv);SD.ic=iv;}
+  const ivm=get('sd-ic-mech'), ive=get('sd-ic-elec'), ivms=get('sd-ic-mechserv');
+  if(ivm!==undefined) SD.icMech=ivm;
+  if(ive!==undefined) SD.icElec=ive;
+  if(ivms!==undefined) SD.icMechServices=ivms;
+  const rw=get('rm-work'), ro=get('rm-other');
+  if(rw!==null&&rw!==undefined) SD.remarksWork=rw;
+  if(ro!==null&&ro!==undefined) SD.remarksOther=ro;
+  const prom=get('prod-rom');
+  if(prom!==null&&prom!==undefined) { SD.production=SD.production||{}; SD.production.rom=prom; }
+  const pfirst=get('prod-first-hour'), plast=get('prod-last-hour');
+  if(pfirst!==null&&pfirst!==undefined) { SD.production=SD.production||{}; SD.production.firstHour=pfirst; }
+  if(plast!==null&&plast!==undefined) { SD.production=SD.production||{}; SD.production.lastHour=plast; }
+}
+
+
+// ═══════════════════════════════════════════════════
+// MANPOWER
+// ═══════════════════════════════════════════════════
+function renderManpower(c) {
+  editBar('manpower',c);
+  const editable = isEditable('manpower');
+  const esc = window.fb.esc, STATUS_COLORS = window.fb.STATUS_COLORS, sortGroups = window.fb.sortGroups;
+  const hasAttendance = !!attendanceDoc;
+
+  // Shift In-charge — only Executives marked Present in this shift's
+  // attendance are eligible candidates.
+  const execsPresent = presentExecutives();
+  const icOpts = execsPresent.map(e=>`<option value="${esc(e.name)}" ${SD.ic===e.name?'selected':''}>${esc(e.name)}</option>`).join('');
+  const sdCard = mkEl('div','card');
+  let icNote = '';
+  if(!hasAttendance) icNote = `<div style="color:var(--red);font-size:12px;margin-top:6px;">⚠ Attendance has not been submitted in Attendance section for this date &amp; shift yet. Mark attendance first.</div>`;
+  else if(!execsPresent.length) icNote = `<div style="color:var(--muted);font-size:12px;margin-top:6px;">No Executives are marked Present for this shift.</div>`;
+  sdCard.innerHTML = `<div class="card-title">🏗️ Shift In-charges</div>
+    <div class="fg"><label>Shift In-charge (Mining)</label><select id="sd-ic" ${(editable && hasAttendance)?'':'disabled'} onchange="onICChange()">
+      <option value="">-- Select --</option>${icOpts}
+    </select></div>
+    ${icNote}
+    <div class="fg"><label>Shift In-charge (Mechanical)</label><input type="text" id="sd-ic-mech" ${editable?'':'disabled'} value="${esc(SD.icMech||'')}" placeholder="Optional" oninput="onICMechChange()"></div>
+    <div class="fg"><label>Shift In-charge (Electrical)</label><input type="text" id="sd-ic-elec" ${editable?'':'disabled'} value="${esc(SD.icElec||'')}" placeholder="Optional" oninput="onICElecChange()"></div>
+    <div class="fg"><label>Shift In-charge (Mech. Services)</label><input type="text" id="sd-ic-mechserv" ${editable?'':'disabled'} value="${esc(SD.icMechServices||'')}" placeholder="Optional" oninput="onICMechServicesChange()"></div>`;
+  c.appendChild(sdCard);
+
+  // Employees — read-only, sourced directly from mark-attendance.html's
+  // submitted record for this date & shift. No manual marking here.
+  const attCard = mkEl('div','card');
+  if(!hasAttendance) {
+    attCard.innerHTML = `<div class="card-title">👷 Employees</div>
+      <p style="color:var(--muted);font-size:13px;padding:4px;">Attendance has not been submitted in Attendance section for this date &amp; shift yet.</p>`;
+  } else {
+    const groups = {};
+    Object.entries(attendanceDoc.entries||{}).forEach(([id,e]) => {
+      const g = e.group || 'Unassigned';
+      (groups[g] = groups[g] || []).push({ id, ...e, isOT:false });
+    });
+    // OT employees are merged into their own group's list rather than
+    // shown in a separate card, so each group shows everyone together.
+    Object.entries(attendanceDoc.otEntries||{}).forEach(([id,e]) => {
+      const g = e.group || 'Unassigned';
+      (groups[g] = groups[g] || []).push({ id, ...e, isOT:true });
+    });
+    Object.values(groups).forEach(list => list.sort((a,b)=>a.name.localeCompare(b.name)));
+    const groupNames = sortGroups(Object.keys(groups));
+    let html = `<div class="card-title">👷 Employees <span class="ct-right" style="color:var(--muted)">from Mark Attendance</span></div>`;
+    if(!groupNames.length) {
+      html += `<p style="color:var(--muted);font-size:13px;padding:4px;">No employees recorded for this shift.</p>`;
+    } else {
+      groupNames.forEach(g => {
+        html += `<div class="section-hd">${esc(g)}</div>`;
+        groups[g].forEach(e => {
+          if(e.isOT) {
+            html += `<div class="mp-item"><div class="mp-info"><div class="mp-name">${esc(e.name)}</div></div>
+              <span class="pill" style="background:${STATUS_COLORS.OT||'#e6851e'};color:#0a0e14;">Present in OT</span></div>`;
+          } else {
+            const color = STATUS_COLORS[e.status] || '#9aa5b1';
+            html += `<div class="mp-item"><div class="mp-info"><div class="mp-name">${esc(e.name)}</div></div>
+              <span class="pill" style="background:${color};color:#0a0e14;">${esc(e.status || 'Not marked')}</span></div>`;
+          }
+        });
+      });
+    }
+    attCard.innerHTML = html;
+  }
+  c.appendChild(attCard);
+
+  // Shift Summary — mirrors the summary shown in Mark Attendance.
+  if(hasAttendance) {
+    const groups = {};
+    Object.entries(attendanceDoc.entries||{}).forEach(([id,e]) => {
+      const g = e.group || 'Unassigned';
+      (groups[g] = groups[g] || []).push(e);
+    });
+    const otEntries = Object.entries(attendanceDoc.otEntries||{});
+    const groupNames = sortGroups(Array.from(new Set([...Object.keys(groups), ...otEntries.map(([id,e])=>e.group)])));
+    let totalNormal = 0, totalOt = 0;
+    const rows = groupNames.map(g => {
+      const normal = (groups[g]||[]).filter(e=>e.status==='Present'||e.status==='Present (Mutual)').length;
+      const ot = otEntries.filter(([id,e])=>e.group===g).length;
+      totalNormal += normal; totalOt += ot;
+      return `<tr><td>${esc(g)}</td><td>${normal}</td><td>${ot}</td><td>${normal+ot}</td></tr>`;
+    });
+    rows.push(`<tr style="font-weight:700;color:var(--accent)"><td>TOTAL</td><td>${totalNormal}</td><td>${totalOt}</td><td>${totalNormal+totalOt}</td></tr>`);
+    const sumCard = mkEl('div','card');
+    sumCard.innerHTML = `<div class="card-title">📊 Shift Summary</div>
+      <div class="tw"><table id="summaryTable"><thead><tr><th>Group</th><th>Normal Duty</th><th>OT</th><th>Total Present</th></tr></thead>
+      <tbody>${rows.join('')}</tbody></table></div>`;
+    c.appendChild(sumCard);
+  }
+
+  const sb = mkEl('div','save-bar');
+  const saveBtn = mkEl('button','btn btn-primary','mp-save-btn');
+  saveBtn.textContent = '💾 Save Manpower';
+  saveBtn.disabled = !hasAttendance || !SD.ic;
+  if(!hasAttendance) saveBtn.title = 'Attendance must be retrieved from Mark Attendance before this tab can be saved';
+  else if(!SD.ic) saveBtn.title = 'Select a Shift In-charge before saving';
+  saveBtn.onclick = () => saveTab('manpower');
+  sb.appendChild(saveBtn);
+  c.appendChild(sb);
+}
+
+function onICChange() {
+  const iv = document.getElementById('sd-ic')?.value;
+  if(iv!==undefined){ ss('shift_ic',iv); SD.ic=iv; }
+  // Keep the Save Manpower button's enabled state in sync with whether
+  // a Shift In-charge has been chosen, without a full tab re-render.
+  const saveBtn = document.getElementById('mp-save-btn');
+  if(saveBtn) {
+    saveBtn.disabled = !attendanceDoc || !SD.ic;
+    saveBtn.title = !attendanceDoc ? 'Attendance must be retrieved from Mark Attendance before this tab can be saved'
+      : (!SD.ic ? 'Select a Shift In-charge before saving' : '');
+  }
+  autoSave();
+  updateBanner();
+}
+// Mechanical/Electrical/Mech. Services Shift In-charge — free-text,
+// optional. Unlike Mining (onICChange above), these never gate the
+// Save button.
+function onICMechChange() {
+  const iv = document.getElementById('sd-ic-mech')?.value;
+  if(iv!==undefined) SD.icMech=iv;
+  autoSave();
+}
+function onICElecChange() {
+  const iv = document.getElementById('sd-ic-elec')?.value;
+  if(iv!==undefined) SD.icElec=iv;
+  autoSave();
+}
+function onICMechServicesChange() {
+  const iv = document.getElementById('sd-ic-mechserv')?.value;
+  if(iv!==undefined) SD.icMechServices=iv;
+  autoSave();
+}
+
+
+
+// ═══════════════════════════════════════════════════
+// SAVE LOGIC
+// ═══════════════════════════════════════════════════
+async function saveTab(tab){
+  collectCurrentTab();
+  if(tab==='production' && !validateTrips()){
+    showToast('Shovel trips and dumper trips must match before saving','err');
+    return;
+  }
+  if(tab==='manpower' && !attendanceDoc){
+    showToast('Cannot save — attendance not yet retrieved from Mark Attendance','err');
+    return;
+  }
+  if(tab==='manpower' && !SD.ic){
+    showToast('Select a Shift In-charge before saving','err');
+    return;
+  }
+  SD.tabSaved=SD.tabSaved||{};
+  SD.tabSaved[tab]=true;
+  state.editMode[tab]=false;
+  const ok = await saveSD();
+  showToast(ok ? `${TAB_LABELS[tab]||tab} saved ✓` : `Save failed — check your connection`, ok?'ok':'err');
+  updateBanner();
+  buildTabs();
+  renderTab(tab);
+  await renderDateLog();
+}
+
+
+
+// ═══════════════════════════════════════════════════
+// LOADING OVERLAY
+// ═══════════════════════════════════════════════════
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function showLoadingScreen(){const ov=document.getElementById('loading-overlay');if(ov)ov.style.display='flex';}
+function hideLoadingScreen(){const ov=document.getElementById('loading-overlay');if(ov)ov.style.display='none';}
+
+
+// ═══════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════
+function mkEl(tag,cls,id){const el=document.createElement(tag);if(cls)el.className=cls;if(id)el.id=id;return el;}
+function fmtN(n){if(!n&&n!==0)return'0';return parseFloat(n).toLocaleString('en-IN');}
+function showToast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} on`;setTimeout(()=>t.className='toast',3200);}
+
+</script>
+<!-- ─── VANTA BACKGROUND ─── -->
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.VANTA) {
+      window.VANTA.FOG({
+        el: "#vanta-bg",
+        mouseControls: true,
+        touchControls: true,
+        gyroControls: false,
+        minHeight: 200.00,
+        minWidth: 200.00,
+        highlightColor: 0x0d0f14,
+        midtoneColor: 0xffffff,
+        lowlightColor: 0x181e2a,
+        baseColor: 0x0d0f14,
+        blurFactor: 0.48,
+        speed: 0.20,
+        zoom: 0.15
+      });
+    }
+  });
+</script>
+</body>
+</html>
+
+</body>
+</html>

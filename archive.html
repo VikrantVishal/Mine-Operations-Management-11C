@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Document Archive — Deposit-11C</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&family=Noto+Sans:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<!-- Preload background engine scripts -->
+<link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js" as="script">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.fog.min.js" as="script">
+<!-- Defer loaded scripts -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.fog.min.js"></script>
+<!-- Cropper.js powers the "Crop and Save" photo flow -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+
+<style>
+  #vanta-bg {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+  }
+
+  body {
+    position: relative;
+    z-index: 0;
+    background: #0d0f14; /* fallback solid base matching Vanta baseColor */
+  }
+
+  @media print {
+    #vanta-bg { display: none !important; }
+    body { background: #ffffff !important; color: #000000 !important; position: static !important; z-index: auto !important; }
+  }
+
+  /* ---------------- Page-specific additions (not already in style.css) ---------------- */
+
+  /* style.css's .page defaults to max-width:900px; widened here to match
+     duty-roster.html's .main (1200px), scoped to this page only. */
+  .page { max-width: 1200px; }
+
+  .upload-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .upload-actions .left-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .file-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--coal-900);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 7px 10px;
+    font-size: 0.8rem;
+    color: var(--text-hi);
+    margin-top: 10px;
+    width: fit-content;
+  }
+  .file-chip .x { cursor: pointer; color: var(--red); font-weight: 700; padding: 0 4px; }
+
+  .status-msg { font-size: 0.8rem; margin-top: 8px; min-height: 16px; color: var(--text-mid); }
+  .status-msg.err { color: var(--red); }
+  .status-msg.ok { color: var(--green); }
+
+  .filter-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  @media (min-width: 640px) {
+    .filter-row { grid-template-columns: 200px 1fr; }
+  }
+
+  .result-count {
+    font-size: 0.75rem;
+    color: var(--text-mid);
+    font-family: "Share Tech Mono", monospace;
+    padding: 0 0 8px;
+  }
+  .result-count span { color: var(--amber); }
+
+  td.title-cell { color: var(--text-hi); white-space: normal; min-width: 160px; }
+  td.id-cell { font-family: "Share Tech Mono", monospace; color: var(--amber); font-size: 0.8rem; }
+
+  /* ---------------- Camera / crop / preview modals ---------------- */
+  .modal-ov.wide-ov .modal { max-width: 640px; }
+  #cameraVideo, #capturedCanvas, #cropImage {
+    width: 100%;
+    max-height: 60vh;
+    background: #000;
+    border-radius: 8px;
+    display: block;
+  }
+  .cropper-wrap { max-height: 60vh; overflow: hidden; border-radius: 8px; }
+  #previewFrame { width: 100%; height: 70vh; border: none; border-radius: 8px; background: #fff; }
+  #previewImg { width: 100%; max-height: 75vh; object-fit: contain; border-radius: 8px; }
+</style>
+</head>
+
+<body>
+<div id="vanta-bg"></div>
+
+<header class="app-header">
+  <div class="header-top">
+    <div class="titles">
+      <h1>Document Archive</h1>
+      <div class="sub">Upload &amp; manage documents</div>
+    </div>
+  </div>
+  <div class="header-bottom">
+    <a class="back-btn" href="index.html">← 🏠 Home</a>
+    <div class="user-badge" id="userBadge"></div>
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- ─── UPLOAD CARD ─── -->
+  <div class="card">
+    <h2><span class="n">＋</span> Upload Document</h2>
+
+    <div class="field-row">
+      <div>
+        <label>Enter Title</label>
+        <input type="text" id="fTitle" placeholder="Document title">
+      </div>
+    </div>
+
+    <div class="field-row two">
+      <div>
+        <label>Enter Document No.</label>
+        <input type="text" id="fDocNo" placeholder="Document No.">
+      </div>
+      <div>
+        <label>Select Type</label>
+        <select id="fType">
+          <option value="">— Select —</option>
+          <option>Office order</option>
+          <option>Circular</option>
+          <option>Letter</option>
+          <option>Memo</option>
+          <option>Bulletin</option>
+          <option>Notice</option>
+          <option>Tour Program</option>
+          <option>File note</option>
+          <option>Instruction</option>
+          <option>Meeting Minutes</option>
+          <option>Drawing/Plan</option>
+          <option>Tender</option>
+          <option>Safety Circular</option>
+          <option>Presentation</option>
+          <option>Other</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="upload-actions">
+      <div class="left-btns">
+        <button type="button" class="btn-outline" id="selectFileBtn">📎 Select File</button>
+        <button type="button" class="btn-outline" id="takePhotoBtn">📷 Take Photo</button>
+        <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,image/*,.pdf,application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none">
+      </div>
+      <button type="button" class="btn-amber" id="uploadBtn">⬆ Upload</button>
+    </div>
+
+    <div id="fileChipHost"></div>
+    <div class="status-msg" id="uploadStatus"></div>
+  </div>
+
+  <!-- ─── FILTER CARD ─── -->
+  <div class="card">
+    <h2><span class="n">🔍</span> Filter Documents</h2>
+    <div class="filter-row">
+      <select id="filterField">
+        <option value="documentId">Document ID</option>
+        <option value="documentNo">Document No.</option>
+        <option value="category">Document Category</option>
+        <option value="title">Title</option>
+        <option value="uploadedBy">Uploaded by</option>
+      </select>
+      <input type="text" id="filterValue" placeholder="Enter detail">
+    </div>
+  </div>
+
+  <!-- ─── DOCUMENT ARCHIVE CARD ─── -->
+  <div class="card">
+    <h2><span class="n">📚</span> Document Archive</h2>
+    <div class="result-count"><span id="resCount">0</span> document(s)</div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>S.No.</th>
+            <th>Document ID</th>
+            <th>Document No.</th>
+            <th>Category</th>
+            <th>Type</th>
+            <th>Title</th>
+            <th>Uploaded By</th>
+            <th>Preview</th>
+            <th>Download</th>
+            <th>Delete</th>
+          </tr>
+        </thead>
+        <tbody id="docTbody">
+          <tr><td colspan="10"><div class="loader"><div class="spinner"></div> Loading...</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ─── CAMERA MODAL ─── -->
+<div class="overlay modal-ov wide-ov" id="cameraModal" style="display:none;">
+  <div class="modal">
+    <h3>Take Photo</h3>
+    <video id="cameraVideo" autoplay playsinline muted></video>
+    <div class="btn-row" style="margin-top:14px; justify-content:flex-end;">
+      <button type="button" class="btn-outline" data-close="cameraModal">Cancel</button>
+      <button type="button" class="btn-amber" id="captureBtn">📸 Capture</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── CAPTURED PHOTO PREVIEW MODAL ─── -->
+<div class="overlay modal-ov wide-ov" id="capturedModal" style="display:none;">
+  <div class="modal">
+    <h3>Captured Photo</h3>
+    <canvas id="capturedCanvas"></canvas>
+    <div class="btn-row" style="margin-top:14px; justify-content:flex-end;">
+      <button type="button" class="btn-outline" id="retakeBtn">↺ Retake</button>
+      <button type="button" class="btn-blue" id="cropSaveBtn">✂ Crop and Save</button>
+      <button type="button" class="btn-amber" id="saveAsIsBtn">✔ Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── CROP MODAL ─── -->
+<div class="overlay modal-ov wide-ov" id="cropModal" style="display:none;">
+  <div class="modal">
+    <h3>Crop Photo</h3>
+    <div class="cropper-wrap"><img id="cropImage" src=""></div>
+    <div class="btn-row" style="margin-top:14px; justify-content:flex-end;">
+      <button type="button" class="btn-outline" data-close="cropModal">Cancel</button>
+      <button type="button" class="btn-amber" id="confirmCropBtn">✔ Save Cropped</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── PREVIEW MODAL ─── -->
+<div class="overlay modal-ov wide-ov" id="previewModal" style="display:none;">
+  <div class="modal">
+    <h3 id="previewTitle">Preview</h3>
+    <div id="previewHost"></div>
+    <div class="btn-row" style="margin-top:14px; justify-content:flex-end;">
+      <button type="button" class="btn-outline" data-close="previewModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── DELETE CONFIRMATION MODAL ─── -->
+<div class="overlay modal-ov wide-ov" id="deleteConfirmModal" style="display:none;">
+  <div class="modal" style="max-width:420px;">
+    <h3>⚠️ Confirm Deletion</h3>
+    <div id="deleteConfirmText" style="font-size:0.9rem; line-height:1.6; color:var(--text-mid);"></div>
+    <div class="btn-row" style="margin-top:18px; justify-content:flex-end;">
+      <button type="button" class="btn-outline" id="deleteNoBtn">No</button>
+      <button type="button" class="btn-amber" id="deleteYesBtn">Yes</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastHost"></div>
+
+<script type="module">
+import { requireAuth, renderUserBadge } from "./auth.js";
+import {
+  db, collection, doc, getDocs, setDoc, deleteDoc, query, orderBy, serverTimestamp, esc
+} from "./firebase-config.js";
+
+// ------------------------------------------------------------
+// Auth
+// ------------------------------------------------------------
+const session = requireAuth();
+if (session) {
+  renderUserBadge('userBadge');
+  init();
+}
+
+function init() {
+
+// ------------------------------------------------------------
+// Cloudinary — same account/preset already used by photo-manager.js
+// (machinery.html's photo pipeline). Reused as-is so this page shares
+// the one storage mechanism rather than creating a separate one.
+// ------------------------------------------------------------
+const CLOUD_NAME = 'nwc5u7hk';
+const UPLOAD_PRESET = 'mine_tracker_preset';
+const DOC_COLLECTION = 'documents';
+
+async function uploadToCloudinary(blob) {
+  const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`;
+  const formData = new FormData();
+  formData.append('file', blob);
+  formData.append('upload_preset', UPLOAD_PRESET);
+
+  const response = await fetch(url, { method: 'POST', body: formData, mode: 'cors', credentials: 'omit' });
+  const text = await response.text();
+  if (!response.ok) {
+    let msg = `Cloudinary upload failed: ${response.status} ${response.statusText}`;
+    try { const j = JSON.parse(text); if (j.error && j.error.message) msg += ` — ${j.error.message}`; }
+    catch (e) { if (text) msg += ` — ${text}`; }
+    throw new Error(msg);
+  }
+  const data = JSON.parse(text);
+  return { url: data.secure_url, bytes: data.bytes, format: data.format, resourceType: data.resource_type, publicId: data.public_id };
+}
+
+
+function cloudinaryDownloadUrl(cloudinaryUrl) {
+  // Forces a real download instead of navigating to/rendering the file.
+  return cloudinaryUrl.replace('/upload/', '/upload/fl_attachment/');
+}
+
+// ------------------------------------------------------------
+// Toast
+// ------------------------------------------------------------
+function toast(msg, isErr = false, ms = 3500) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (isErr ? ' err' : '');
+  t.textContent = msg;
+  document.getElementById('toastHost').appendChild(t);
+  setTimeout(() => t.remove(), ms);
+}
+
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+document.querySelectorAll('[data-close]').forEach(el => {
+  el.addEventListener('click', () => closeModal(el.dataset.close));
+});
+
+let deleteConfirmResolve = null;
+
+function askDeleteConfirmation(message) {
+  document.getElementById('deleteConfirmText').textContent = message;
+  openModal('deleteConfirmModal');
+  return new Promise(resolve => { deleteConfirmResolve = resolve; });
+}
+
+function closeDeleteConfirmation(result) {
+  closeModal('deleteConfirmModal');
+  if (deleteConfirmResolve) {
+    deleteConfirmResolve(result);
+    deleteConfirmResolve = null;
+  }
+}
+
+document.getElementById('deleteNoBtn').addEventListener('click', () => closeDeleteConfirmation(false));
+document.getElementById('deleteYesBtn').addEventListener('click', () => closeDeleteConfirmation(true));
+document.getElementById('deleteConfirmModal').addEventListener('click', (event) => {
+  if (event.target.id === 'deleteConfirmModal') closeDeleteConfirmation(false);
+});
+
+// ------------------------------------------------------------
+// Selected-file state (shared by Select File + Take Photo)
+// ------------------------------------------------------------
+let selectedFile = null;
+
+function setSelectedFile(fileOrBlob, name) {
+  if (fileOrBlob && !fileOrBlob.name && name) {
+    selectedFile = new File([fileOrBlob], name, { type: fileOrBlob.type });
+  } else {
+    selectedFile = fileOrBlob;
+  }
+  renderFileChip();
+}
+
+function clearSelectedFile() {
+  selectedFile = null;
+  document.getElementById('fileInput').value = '';
+  renderFileChip();
+}
+
+function renderFileChip() {
+  const host = document.getElementById('fileChipHost');
+  if (!selectedFile) { host.innerHTML = ''; return; }
+  host.innerHTML = `<div class="file-chip">📄 ${esc(selectedFile.name)} <span class="x" id="clearFileX">✕</span></div>`;
+  document.getElementById('clearFileX').addEventListener('click', clearSelectedFile);
+}
+
+// ------------------------------------------------------------
+// Select File
+// ------------------------------------------------------------
+document.getElementById('selectFileBtn').addEventListener('click', () => {
+  document.getElementById('fileInput').click();
+});
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (f) setSelectedFile(f);
+});
+
+// ------------------------------------------------------------
+// Take Photo — camera capture, then Crop and Save / Save
+// ------------------------------------------------------------
+let cameraStream = null;
+
+document.getElementById('takePhotoBtn').addEventListener('click', async () => {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('cameraVideo');
+    video.srcObject = cameraStream;
+    openModal('cameraModal');
+  } catch (err) {
+    toast('Could not access camera: ' + err.message, true);
+  }
+});
+
+function stopCamera() {
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+}
+document.querySelectorAll('[data-close="cameraModal"]').forEach(el => el.addEventListener('click', stopCamera));
+
+document.getElementById('captureBtn').addEventListener('click', () => {
+  const video = document.getElementById('cameraVideo');
+  const canvas = document.getElementById('capturedCanvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  stopCamera();
+  closeModal('cameraModal');
+  openModal('capturedModal');
+});
+
+document.getElementById('retakeBtn').addEventListener('click', () => {
+  closeModal('capturedModal');
+  document.getElementById('takePhotoBtn').click();
+});
+
+function canvasToFile(canvas, cb) {
+  canvas.toBlob(blob => {
+    const name = `photo-${Date.now()}.jpg`;
+    cb(new File([blob], name, { type: 'image/jpeg' }));
+  }, 'image/jpeg', 0.9);
+}
+
+document.getElementById('saveAsIsBtn').addEventListener('click', () => {
+  const canvas = document.getElementById('capturedCanvas');
+  canvasToFile(canvas, (file) => {
+    setSelectedFile(file);
+    closeModal('capturedModal');
+  });
+});
+
+let cropper = null;
+document.getElementById('cropSaveBtn').addEventListener('click', () => {
+  const canvas = document.getElementById('capturedCanvas');
+  const img = document.getElementById('cropImage');
+  img.src = canvas.toDataURL('image/jpeg', 0.95);
+  closeModal('capturedModal');
+  openModal('cropModal');
+  img.onload = () => {
+    if (cropper) cropper.destroy();
+    cropper = new Cropper(img, { viewMode: 1, autoCropArea: 1, background: false });
+  };
+});
+
+document.getElementById('confirmCropBtn').addEventListener('click', () => {
+  if (!cropper) return;
+  const croppedCanvas = cropper.getCroppedCanvas();
+  canvasToFile(croppedCanvas, (file) => {
+    setSelectedFile(file);
+    cropper.destroy();
+    cropper = null;
+    closeModal('cropModal');
+  });
+});
+
+// ------------------------------------------------------------
+// Document ID generation (D001, D002, ... — permanent, derived
+// from existing Firestore records, never reassigned on refresh)
+// ------------------------------------------------------------
+function nextDocumentId(existingDocs) {
+  let max = 0;
+  existingDocs.forEach(d => {
+    const m = /^D(\d+)$/.exec(d.documentId || d.id || '');
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return 'D' + String(max + 1).padStart(3, '0');
+}
+
+// ------------------------------------------------------------
+// Upload flow
+// ------------------------------------------------------------
+let allDocs = [];
+
+document.getElementById('uploadBtn').addEventListener('click', async () => {
+  const title = document.getElementById('fTitle').value.trim();
+  const docNo = document.getElementById('fDocNo').value.trim();
+  const category = document.getElementById('fType').value;
+  const statusEl = document.getElementById('uploadStatus');
+  statusEl.className = 'status-msg';
+
+  if (!title) { statusEl.textContent = 'Please enter a Title.'; statusEl.className = 'status-msg err'; return; }
+  if (!docNo) { statusEl.textContent = 'Please enter a Document No.'; statusEl.className = 'status-msg err'; return; }
+  if (!category) { statusEl.textContent = 'Please select a Document Type.'; statusEl.className = 'status-msg err'; return; }
+  if (!selectedFile) { statusEl.textContent = 'Please select a file or take a photo.'; statusEl.className = 'status-msg err'; return; }
+
+  const uploadBtn = document.getElementById('uploadBtn');
+  uploadBtn.disabled = true;
+  statusEl.textContent = 'Uploading…';
+
+  try {
+    const upload = await uploadToCloudinary(selectedFile);
+    const documentId = nextDocumentId(allDocs);
+
+    const record = {
+      documentId,
+      documentNo: docNo,
+      category,
+      title,
+      uploadedBy: session ? (session.displayName || session.username) : 'Unknown',
+      uploadedAt: serverTimestamp(),
+      originalFileName: selectedFile.name,
+      fileType: selectedFile.type || upload.format || '',
+      cloudinaryUrl: upload.url,
+      resourceType: upload.resourceType,
+      fileBytes: upload.bytes
+    };
+
+    await setDoc(doc(collection(db, DOC_COLLECTION), documentId), record);
+
+    statusEl.textContent = '✓ Document uploaded successfully.';
+    statusEl.className = 'status-msg ok';
+    document.getElementById('fTitle').value = '';
+    document.getElementById('fDocNo').value = '';
+    document.getElementById('fType').value = '';
+    clearSelectedFile();
+    toast(`Document ${documentId} uploaded.`);
+    await loadDocuments();
+  } catch (err) {
+    statusEl.textContent = 'Upload failed: ' + err.message;
+    statusEl.className = 'status-msg err';
+  } finally {
+    uploadBtn.disabled = false;
+  }
+});
+
+// ------------------------------------------------------------
+// Load + render + filter
+// ------------------------------------------------------------
+async function loadDocuments() {
+  const tbody = document.getElementById('docTbody');
+  tbody.innerHTML = `<tr><td colspan="10"><div class="loader"><div class="spinner"></div> Loading...</div></td></tr>`;
+  try {
+    const snap = await getDocs(query(collection(db, DOC_COLLECTION), orderBy('uploadedAt', 'desc')));
+    allDocs = [];
+    snap.forEach(d => allDocs.push({ id: d.id, ...d.data() }));
+    applyFilter();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state" style="color:var(--red);">Error loading documents: ${esc(e.message)}</div></td></tr>`;
+  }
+}
+
+
+
+function applyFilter() {
+  const field = document.getElementById('filterField').value;
+  const value = document.getElementById('filterValue').value.trim().toLowerCase();
+  let list = allDocs;
+  if (value) {
+    list = allDocs.filter(d => String(d[field] || '').toLowerCase().includes(value));
+  }
+  renderTable(list);
+}
+
+document.getElementById('filterField').addEventListener('change', applyFilter);
+document.getElementById('filterValue').addEventListener('input', applyFilter);
+
+function fileKind(rec) {
+  const type = (rec.fileType || '').toLowerCase();
+  const name = (rec.originalFileName || '').toLowerCase();
+  if (type.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$/.test(name)) return 'image';
+  if (type === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+  if (/word|\.docx?$/.test(type) || /\.docx?$/.test(name)) return 'word';
+  if (/powerpoint|\.pptx?$/.test(type) || /\.pptx?$/.test(name)) return 'ppt';
+  if (/excel|sheet|\.xlsx?$/.test(type) || /\.xlsx?$/.test(name)) return 'excel';
+  return 'other';
+}
+
+function fileKindLabel(rec) {
+  const kind = fileKind(rec);
+  const labels = {
+    image: 'Image',
+    pdf: 'PDF',
+    word: 'Word',
+    ppt: 'PPT',
+    excel: 'Excel',
+    other: 'Other'
+  };
+  return labels[kind] || '📁 Other';
+}
+
+
+function renderTable(list) {
+  document.getElementById('resCount').textContent = list.length;
+  const tbody = document.getElementById('docTbody');
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state">No documents found.</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map((d, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td class="id-cell">${esc(d.documentId)}</td>
+      <td>${esc(d.documentNo || '')}</td>
+      <td>${esc(d.category || '')}</td>
+      <td><span style="font-family:'Share Tech Mono', monospace; font-size:0.8rem; color:var(--text-mid);">${fileKindLabel(d)}</span></td>
+      <td class="title-cell">${esc(d.title || '')}</td>
+      <td>${esc(d.uploadedBy || '')}</td>
+      <td><button type="button" class="btn-outline btn-sm" data-preview="${esc(d.id)}">👁 Preview</button></td>
+      <td><button type="button" class="btn-blue btn-sm" data-download="${esc(d.id)}">⬇ Download</button></td>
+      <td><button type="button" class="btn-outline btn-sm" data-delete="${esc(d.id)}">🗑 Delete</button></td>
+    </tr>`).join('');
+
+  tbody.querySelectorAll('[data-preview]').forEach(btn => {
+    btn.addEventListener('click', () => openPreview(allDocs.find(d => d.id === btn.dataset.preview)));
+  });
+  tbody.querySelectorAll('[data-download]').forEach(btn => {
+    btn.addEventListener('click', () => doDownload(allDocs.find(d => d.id === btn.dataset.download)));
+  });
+  tbody.querySelectorAll('[data-delete]').forEach(btn => {
+    btn.addEventListener('click', () => deleteDocument(allDocs.find(d => d.id === btn.dataset.delete), btn));
+  });
+}
+
+async function deleteDocument(rec, button) {
+  if (!rec) return;
+  const confirmed = await askDeleteConfirmation(`Are you sure you want to delete "${rec.title || rec.originalFileName || rec.documentId}"?`);
+  if (!confirmed) return;
+
+  button.disabled = true;
+  try {
+    await deleteDoc(doc(db, DOC_COLLECTION, rec.id));
+    allDocs = allDocs.filter(d => d.id !== rec.id);
+    applyFilter();
+    toast(`Document ${rec.documentId || ''} deleted.`);
+  } catch (err) {
+    button.disabled = false;
+    toast('Delete failed: ' + err.message, true);
+  }
+}
+
+function openPreview(rec) {
+  if (!rec) return;
+  const kind = fileKind(rec);
+  document.getElementById('previewTitle').textContent = rec.title || rec.originalFileName || 'Preview';
+  const host = document.getElementById('previewHost');
+
+if (kind === 'image') {
+    // Inject f_auto transformation so Cloudinary automatically converts HEIC/HEIF to WebP/JPEG for browser display
+    let displayUrl = rec.cloudinaryUrl;
+    if (displayUrl && displayUrl.includes('/upload/')) {
+      displayUrl = displayUrl.replace('/upload/', '/upload/f_auto,q_auto/');
+    }
+    host.innerHTML = `<img id="previewImg" src="${esc(displayUrl)}" alt="${esc(rec.title || '')}">`;
+  } else if (kind === 'pdf') {
+    const previewUrl = rec.cloudinaryUrl;
+    host.innerHTML = `<iframe id="previewFrame" src="${esc(previewUrl)}" title="${esc(rec.title || 'PDF preview')}"></iframe>
+      <div class="btn-row" style="margin-top:10px;"><a class="btn-outline btn-sm" href="${esc(previewUrl)}" target="_blank" rel="noopener">Open in new tab</a></div>`;
+  } else if (kind === 'word' || kind === 'ppt' || kind === 'excel') {
+    const viewerUrl = 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(rec.cloudinaryUrl);
+    host.innerHTML = `<iframe id="previewFrame" src="${esc(viewerUrl)}"></iframe>
+      <div class="btn-row" style="margin-top:10px;">
+        <a class="btn-outline btn-sm" href="${esc(rec.cloudinaryUrl)}" target="_blank" rel="noopener">Open original</a>
+      </div>`;
+  } else {
+    host.innerHTML = `<div class="empty-state">Preview is not available for this file type.</div>
+      <div class="btn-row" style="margin-top:10px;"><a class="btn-amber btn-sm" href="${esc(cloudinaryDownloadUrl(rec.cloudinaryUrl))}">⬇ Download instead</a></div>`;
+  }
+  openModal('previewModal');
+}
+
+function doDownload(rec) {
+  if (!rec) return;
+  const a = document.createElement('a');
+  a.href = cloudinaryDownloadUrl(rec.cloudinaryUrl);
+  a.download = rec.originalFileName || rec.documentId;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+// ------------------------------------------------------------
+// START
+// ------------------------------------------------------------
+loadDocuments();
+
+}
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.VANTA) {
+      window.VANTA.FOG({
+        el: "#vanta-bg",
+        mouseControls: true,
+        touchControls: true,
+        gyroControls: false,
+        minHeight: 200.00,
+        minWidth: 200.00,
+        highlightColor: 0x0d0f14,
+        midtoneColor: 0xffffff,
+        lowlightColor: 0x181e2a,
+        baseColor: 0x0d0f14,
+        blurFactor: 0.48,
+        speed: 0.20,
+        zoom: 0.15
+      });
+    }
+  });
+</script>
+
+</body>
+</html>

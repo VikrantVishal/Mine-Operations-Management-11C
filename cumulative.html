@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Deposit 11C shift reporting — Cumulative Report</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style1.css">
+<!-- Preload background engine scripts as early as possible so the animated
+     background is ready with no flash/delay once the page paints -->
+<link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js" as="script">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.fog.min.js" as="script">
+<!-- Loaded with "defer" so the browser starts fetching them immediately in parallel -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.fog.min.js"></script>
+
+<style>
+  /* Sidebar user badge (replaces the static "Mining Operations Tracker" tagline) */
+  .sb-user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .sb-user-row .user-badge-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sb-user-row .admin-tag {
+    font-size: 9px;
+    font-weight: 700;
+    color: #000;
+    background: var(--accent);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 4px;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+  }
+  .sb-user-row .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    padding: 3px 10px;
+    border-radius: var(--r);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    transition: all 0.18s;
+    flex-shrink: 0;
+  }
+  .sb-user-row .btn-outline:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Cumulative report › Production: ROM / Waste / Stockpile in one row, 3 equal columns.
+     Scoped to .cumul-prod-grid so the shared .stat-grid.g3 rule in style1.css
+     (used by other pages) is not affected. */
+  .stat-grid.g3.cumul-prod-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .cumul-prod-grid .stat-box {
+    min-width: 0;            /* lets 1fr tracks stay truly equal even with long numbers */
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .cumul-prod-grid .stat-val {
+    font-size: clamp(14px, 4.6vw, 19px);   /* keeps large totals inside the box on narrow phones */
+    overflow-wrap: anywhere;
+  }
+
+  /* Cumulative report › Shovel Operator/Helper Trips: gold / silver / bronze S. No. badges for ranks 1–3 */
+  .cumul-rank {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    color: #1a1a1a;
+    vertical-align: middle;
+  }
+  .cumul-rank.r1 { background: #ffd700; box-shadow: 0 0 7px 1px rgba(255, 215, 0, 0.6); }
+  .cumul-rank.r2 { background: #c0c0c0; box-shadow: 0 0 7px 1px rgba(192, 192, 192, 0.55); }
+  .cumul-rank.r3 { background: #cd7f32; box-shadow: 0 0 7px 1px rgba(205, 127, 50, 0.55); }
+
+  /* Sticky report metadata header styled after .parent-file-info */
+  .cumul-meta-bar {
+    position: sticky;
+    top: -12px;                      /* Offsets #tab-content's top padding */
+    z-index: 20;                     /* Keeps it above cards and tables */
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .3px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-right: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: -12px 0 10px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  
+  }
+  .cumul-meta-bar .pf-time {
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+
+</style>
+</head>
+<body>
+
+<div class="sbo" id="sbo" onclick="closeSB()"></div>
+<div id="vanta-bg"></div>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="sb-head">
+    <h2>🌱Deposit 11C🌱</h2>
+    <div class="sb-user-row" id="sidebarUserBadge"></div>
+  </div>
+  <div class="sb-fixed">
+    <div class="sb-section">Reports</div>
+    <div class="sb-tile" id="sb-daily" onclick="setReport('daily')"><span class="icon">📋</span>Daily Report</div>
+    <div class="sb-tile" id="sb-cumul" onclick="setReport('cumul')"><span class="icon">📊</span>Cumulative Report</div>
+    <div class="sb-tile" onclick="location.href='shift-report.html'"><span class="icon">🧾</span>Shift Report Generator</div>
+    <div class="sb-tile" onclick="location.href='allocation-register.html'"><span class="icon">📑</span>Allocation Register</div>
+    <div class="sb-section">Master Data</div>
+    <div class="sb-tile" onclick="goResources()"><span class="icon">📁</span>Resources (Master List)</div>
+
+    <!-- SHIFT TOGGLE -->
+    <div class="sb-section">View</div>
+    <div class="toggle-row">
+      <div><div class="toggle-lbl">Light / Dark</div><div class="toggle-sub" id="theme-toggle-lbl">Dark theme enabled</div></div>
+      <label class="ts"><input type="checkbox" id="theme-toggle" onchange="onThemeToggle()"><span class="ts-slider"></span></label>
+    </div>
+  </div>
+
+  <!-- DATE LOG — the only part of the sidebar that scrolls -->
+  <div class="sb-log-wrap">
+    <div class="sb-section">Report Log</div>
+    <div class="sb-scroll" id="date-log"></div>
+  </div>
+
+  <div class="sb-foot">
+    <div class="sb-credit">Designed and managed by Vikrant Vishal 😎</div>
+  </div>
+</div>
+
+<!-- APP HEADER (unified with main-menu.html / Attendance Portal) -->
+<header class="app-header">
+  <div class="header-top">
+    <div class="titles">
+      <button class="menu-btn" onclick="toggleSB()" aria-label="Open menu">☰</button>
+      <div class="logo-icon">📝</div>
+      <div>
+        <h1>DEPOSIT 11C</h1>
+        <div class="sub">Mining Operations</div>
+      </div>
+    </div>
+    <div class="home-date-group">
+      <a class="home-btn" href="index.html" title="Home" aria-label="Back to Home">🏠</a>
+      <!-- Moved datetime-chip here -->
+      <div class="datetime-chip">
+        <div class="time" id="clock">--:--</div>
+        <div id="topdate">--</div>
+      </div>
+    </div>
+  </div>
+  <div class="header-bottom">
+    <!-- <div id="sync-dot" class="sync-dot"></div> -->
+  </div>
+</header>
+
+<!-- APP BODY -->
+<div id="app-body">
+  <div class="tabs-wrap" id="tabs-wrap"></div>
+  <div id="tab-content"></div>
+
+<div class="toast" id="toast"></div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" style="display:flex;position:fixed;inset:0;background:rgba(10,14,20,0.92);z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;color:#f5a623;letter-spacing:1px">🌱Deposit 11C🌱</div>
+  <div style="font-size:13px;color:#6a8099">Loading data...</div>
+  <div style="width:48px;height:48px;border:3px solid #243040;border-top-color:#f5a623;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</div>
+
+<!-- FIREBASE (Firestore) — shared config with the Deposit-11C Attendance System -->
+<script type="module">
+  import {
+    db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp
+  } from "./firebase-config.js";
+  import { requireAuth, renderUserBadge } from "./auth.js";
+  // Same login/session system used by Attendance Management. If nobody is
+  // signed in this redirects to login.html?redirect=cumulative.html(+query),
+  // preserving ?auto=1 so the user lands back on the exact page after login.
+  window.__d11cAuthed = !!requireAuth();
+  // Populate the sidebar with the signed-in user's name + a Logout button.
+  // renderUserBadge() is the exact same function main-menu.html uses, so the
+  // displayed name (from the active session) and the Logout behaviour
+  // (session clear + redirect to login.html) are identical to the rest of
+  // the portal — nothing here is hard-coded.
+  if (window.__d11cAuthed) {
+    renderUserBadge('sidebarUserBadge');
+    // Prefix the sidebar's user name with 👤 without touching auth.js's
+    // shared renderUserBadge() (used unchanged on other pages).
+    const sbNameEl = document.querySelector('#sidebarUserBadge .user-badge-name');
+    if (sbNameEl) sbNameEl.prepend('👤 ');
+  }
+  window.fb = { db, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp };
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════
+const SHIFT_NAMES = {1:'First Shift',2:'Second Shift',3:'Night Shift'};
+const MP_ROLES = ['Executive','Shovel Operator','Dumper Operator','Drill Operator','Dozer Operator','Driver','Field Attendant','Trainee','Other'];
+const MACH_CATS = ['Shovel','Dumper','Drill','Water Sprinkler','Dozer','Light Vehicle','Other'];
+const STRATA = ['Very Hard','Hard','Medium','Soft'];
+const SAVE_TABS = ['manpower','production','drilling','machinery','allocation','remarks'];
+// Tab order: Overview, Manpower, Allocation, Production, Drilling, Machinery, Remarks
+const TAB_ORDER = ['overview','manpower','allocation','production','drilling','machinery','remarks'];
+const TAB_LABELS = {overview:'Overview',manpower:'Manpower',allocation:'Allocation',production:'Production',drilling:'Drilling',machinery:'Machinery',remarks:'Remarks'};
+// Maps each daily-report tab to the standalone page that now holds it
+// (this app used to be a single-page tool with in-page tab switching;
+// each tab now lives in its own HTML file, linked here).
+const PAGE_URLS = {overview:'overview.html',manpower:'manpower.html',allocation:'allocation.html',production:'production.html',drilling:'drilling.html',machinery:'machinery.html',remarks:'remarks.html'};
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let state = { report:'cumul', currentTab:'cumulative', editMode:{}, photos:[], machPhotos:{} };
+let mpFilter = 'all';
+let machCatFilter = 'all';
+let isLightTheme = false;
+
+// ═══════════════════════════════════════════════════
+// STORAGE HELPERS (local — UI preferences only, e.g. theme
+// and which date/shift is currently open. All report data
+// and master lists live in Firestore, never in localStorage.)
+// ═══════════════════════════════════════════════════
+const ls = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e) { return null; } };
+const ss = (k,v) => localStorage.setItem(k, JSON.stringify(v));
+isLightTheme = ls('theme_mode') === 'light';
+
+// ═══════════════════════════════════════════════════
+// FIREBASE (Firestore) DATA LAYER
+// Same Firebase project/config as the Deposit-11C Attendance
+// System (see firebase-config.js). Collections used here:
+//   shiftReports/{date}_shift{n}  — one doc per date+shift, holds the full shift report
+//   machinery/{machineryId}       — machinery master list; the Machinery ID is the doc ID (permanent unique identifier)
+//   manpower/{employeeId}         — manpower master list
+// ═══════════════════════════════════════════════════
+function fbCol(name){ return window.fb.collection(window.fb.db, name); }
+function fbDocRef(name,id){ return window.fb.doc(window.fb.db, name, String(id)); }
+
+
+// Bundled defaults — used only to seed Firestore the very first time
+// the app is opened against an empty database.
+// Bundled defaults — used only to seed Firestore the very first time
+// the app is opened against an empty database.
+const DEFAULT_RESOURCES = {
+  manpower:[
+    {id:1,name:'Prashant Raut',role:'Executive'},
+    {id:2,name:'Rajesh Sharma',role:'Executive'},
+    {id:3,name:'Ravi Kumar',role:'Shovel Operator'},
+    {id:4,name:'Amit Singh',role:'Dumper Operator'},
+    {id:5,name:'Suresh Yadav',role:'Drill Operator'},
+    {id:6,name:'Manoj Tiwari',role:'Dozer Operator'},
+    {id:7,name:'Prakash Jha',role:'Driver'},
+    {id:8,name:'Rakesh Kumar',role:'Field Attendant'},
+    {id:9,name:'Anil Verma',role:'Trainee'},
+  ],
+  machinery:[
+    {id:'ES20',cat:'Shovel'},{id:'ES21',cat:'Shovel'},{id:'ES23',cat:'Shovel'},
+    {id:'HS27',cat:'Shovel'},{id:'FEL1A',cat:'Shovel'},{id:'RBS2',cat:'Shovel'},
+    {id:'IDM4A',cat:'Drill'},{id:'IDM5A',cat:'Drill'},{id:'IDM7',cat:'Drill'},
+    {id:'BD17',cat:'Drill'},{id:'THD2',cat:'Drill'},
+    {id:'KD55',cat:'Dumper'},{id:'KD56',cat:'Dumper'},{id:'KD57',cat:'Dumper'},
+    {id:'KD58',cat:'Dumper'},{id:'KD62',cat:'Dumper'},{id:'KD63',cat:'Dumper'},
+    {id:'KD64',cat:'Dumper'},{id:'KD65',cat:'Dumper'},
+    {id:'K2C',cat:'Dozer'},{id:'MG5',cat:'Dozer'},{id:'K8',cat:'Dozer'},
+    {id:'PD2',cat:'Dozer'},{id:'K11',cat:'Dozer'},{id:'MG10',cat:'Dozer'},{id:'K10',cat:'Dozer'},
+    {id:'Force-0669',cat:'Light Vehicle'},{id:'Bolero-5642',cat:'Light Vehicle'},
+    {id:'Bolero-5641',cat:'Light Vehicle'},{id:'Force-5651',cat:'Light Vehicle'},
+    {id:'WaterSprinkler-7',cat:'Water Sprinkler'},{id:'DieselBowser',cat:'Other'},
+  ]
+};
+
+
+// ═══════════════════════════════════════════════════
+// RESOURCES (Manpower & Machinery master lists — Firestore)
+// ═══════════════════════════════════════════════════
+let resources = { manpower:[], machinery:[] };
+
+async function loadResources(){
+  try{
+    const [mpSnap, machSnap] = await Promise.all([
+      window.fb.getDocs(fbCol('manpower')),
+      window.fb.getDocs(fbCol('machinery'))
+    ]);
+    let manpower = []; mpSnap.forEach(d=>{ const n=Number(d.id); manpower.push({ id: Number.isFinite(n)?n:d.id, ...d.data() }); });
+    let machinery = []; machSnap.forEach(d=>machinery.push({ id: d.id, ...d.data() }));
+
+    if(!manpower.length && !machinery.length){
+      // First run against an empty database — seed Firestore with the bundled defaults.
+      manpower = DEFAULT_RESOURCES.manpower;
+      machinery = DEFAULT_RESOURCES.machinery;
+      await Promise.all([
+        ...manpower.map(m => window.fb.setDoc(fbDocRef('manpower', m.id), { name:m.name, role:m.role })),
+        ...machinery.map(m => window.fb.setDoc(fbDocRef('machinery', m.id), { cat:m.cat }))
+      ]);
+    }
+    resources = { manpower, machinery };
+  }catch(e){
+    console.warn('Failed to load resources from Firestore, using bundled defaults', e);
+    resources = { manpower: DEFAULT_RESOURCES.manpower.slice(), machinery: DEFAULT_RESOURCES.machinery.slice() };
+  }
+}
+
+
+// ═══════════════════════════════════════════════════
+// SHIFT DATA
+// ═══════════════════════════════════════════════════
+function today() { return new Date().toISOString().split('T')[0]; }
+function getShiftDate() { return ls('shift_date') || today(); }
+function getShiftNum() { return ls('shift_num') || 1; }
+function getCurrentKey() { return `${getShiftDate()}_shift${getShiftNum()}`; }
+
+function defaultSD() {
+  return {
+    date:getShiftDate(), shift:getShiftNum(), ic:'', saved:false,
+    tabSaved:{}, // which tabs have been saved
+    attendance:{}, attendanceRemarks:{},
+    otPersonnel:[], othersPersonnel:[],
+    production:{rom:'',waste:'',sp:'',firstHour:'',lastHour:'',affectedBy:[''],plantStoppage:['']},
+    shovelRows:[], dumperRows:[],
+    drillRows:[], drillSummary:{totalM:0,totalH:0},
+    machinery:{},
+    remarksWork:'', remarksOther:'',
+    photos:[], machPhotos:{}
+  };
+}
+
+
+let SD = {};
+
+async function loadSD() {
+  const id = getCurrentKey();
+  try{
+    const snap = await window.fb.getDoc(fbDocRef('shiftReports', id));
+    SD = snap.exists() ? snap.data() : defaultSD();
+  }catch(e){
+    console.warn('Failed to load shift report from Firestore', e);
+    SD = defaultSD();
+  }
+  state.photos = SD.photos || [];
+  state.machPhotos = SD.machPhotos || {};
+}
+async function saveSD() {
+  SD.photos = state.photos;
+  SD.machPhotos = state.machPhotos;
+  SD.saved = true;
+  try{
+    await window.fb.setDoc(fbDocRef('shiftReports', getCurrentKey()), SD);
+    return true;
+  }catch(e){
+    console.warn('Failed to save shift report to Firestore', e);
+    return false;
+  }
+}
+
+
+// Debounced auto-save to Firestore (Firestore's own offline persistence,
+// enabled in firebase-config.js, keeps this instant and safe even offline).
+let _autoSaveTimer = null;
+function autoSave(){
+  showSyncDot('saving');
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(async ()=>{
+    const ok = await saveSD();
+    showSyncDot(ok?'ok':'err');
+  }, 1500);
+}
+
+function showSyncDot(state){
+  const dot = document.getElementById('sync-dot');
+  if(!dot) return;
+  dot.className = 'sync-dot ' + state;
+  if(state==='ok'||state==='err') setTimeout(()=>{ dot.className='sync-dot'; }, 2000);
+}
+
+
+function fmtDateWithDay(dateInput) {
+  const d = typeof dateInput === 'string' ? new Date(dateInput+'T00:00:00') : new Date(dateInput);
+  const main = d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const day = d.toLocaleDateString('en-IN',{weekday:'short'});
+  return `${main} (${day})`;
+}
+
+
+// ═══════════════════════════════════════════════════
+// CLOCK & INIT
+// ═══════════════════════════════════════════════════
+function tickClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent = n.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+  document.getElementById('topdate').textContent = fmtDateWithDay(n);
+}
+setInterval(tickClock,1000); tickClock();
+
+
+// Was window.onload — that event waits for EVERY resource on the page to
+// finish (Three.js, Vanta fog, both Google Fonts stylesheets, etc). On a
+// slow/flaky mobile connection any one of those decorative assets can stall
+// or fail, so 'load' fires very late or not at all, and the app looked like
+// it "failed to load" (no spinner either, since showLoadingScreen() only
+// ran inside this same handler). The real app only depends on the DOM
+// being parsed and the auth module (which is deferred, so it has already
+// run) — so it now starts on DOMContentLoaded instead, independent of the
+// background/fonts. initApp() is also called immediately below in case
+// DOMContentLoaded has already fired by the time this script runs.
+async function initApp() {
+  if (window.__appInitStarted) return; // guard against double-init
+  window.__appInitStarted = true;
+  if (!window.__d11cAuthed) return; // not signed in — requireAuth() is already redirecting to login.html
+  applyTheme();
+  showLoadingScreen();
+  document.getElementById('sb-daily').classList.toggle('on', false);
+  document.getElementById('sb-cumul').classList.toggle('on', true);
+  try {
+  await loadResources();   // manpower + machinery master lists from Firestore
+  await loadSD();          // current date/shift's report from Firestore
+  buildTabs();
+  await renderDateLog();
+  renderTab('cumulative');
+  } catch (e) {
+    showToast('Failed to load: ' + e.message, 'err');
+  }
+  hideLoadingScreen();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  // DOMContentLoaded already fired before this script ran
+  initApp();
+}
+
+// Manual "Refresh from Cloud" — re-pulls resources + the currently open
+// report + the sidebar report log from Firestore.
+async function manualRefresh(){
+  showLoadingScreen();
+  try{
+    await loadResources();
+    await loadSD();
+    buildTabs();
+    await renderDateLog();
+    renderTab(state.currentTab);
+    showToast('Refreshed from cloud ✓','ok');
+  }catch(e){
+    showToast('Refresh failed: '+e.message,'err');
+  }
+  hideLoadingScreen();
+  closeSB();
+}
+
+// ═══════════════════════════════════════════════════
+// TABS / NAVIGATION
+// (each daily-report tab is now its own page; the tab strip
+// links between them instead of switching in-page)
+// ═══════════════════════════════════════════════════
+function buildTabs() {
+  const tw = document.getElementById('tabs-wrap');
+  tw.innerHTML = '';
+  const b = document.createElement('button');
+  b.className = 'tab-btn active';
+  b.textContent = 'Cumulative';
+  tw.appendChild(b);
+}
+function renderTab(name) {
+  const c = document.getElementById('tab-content');
+  c.innerHTML = '';
+  renderCumulative(c);
+}
+
+function toggleSB() { document.getElementById('sidebar').classList.toggle('open'); document.getElementById('sbo').classList.toggle('on'); }
+function closeSB() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sbo').classList.remove('on'); }
+
+function setReport(r) {
+  if (r === 'cumul') location.href = 'cumulative.html';
+  else location.href = 'overview.html';
+}
+function goResources() {
+  location.href = 'resources.html';
+}
+
+// ═══════════════════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════════════════
+function applyTheme() {
+  document.body.classList.toggle('light-theme', isLightTheme);
+  const tg = document.getElementById('theme-toggle');
+  if(tg) tg.checked = isLightTheme;
+  const lbl = document.getElementById('theme-toggle-lbl');
+  if(lbl) lbl.textContent = isLightTheme ? 'Light theme enabled' : 'Dark theme enabled';
+}
+function onThemeToggle() {
+  isLightTheme = document.getElementById('theme-toggle').checked;
+  ss('theme_mode', isLightTheme ? 'light' : 'dark');
+  applyTheme();
+}
+
+
+// ═══════════════════════════════════════════════════
+// DATE LOG (sidebar)
+// ═══════════════════════════════════════════════════
+async function renderDateLog() {
+  const el = document.getElementById('date-log');
+  if(!el) return;
+  el.innerHTML = '<div style="padding:10px 16px;font-size:12px;color:var(--muted2)">Loading…</div>';
+
+  // scan last 30 days
+  const days = [];
+  for(let i=0;i<30;i++) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    days.push(d.toISOString().split('T')[0]);
+  }
+  const cutoff = days[days.length-1];
+
+  // {date: {1:{tabSaved,finalSubmitted}, 2:..., 3:...}}
+  const byDate = {};
+  try{
+    const q = window.fb.query(fbCol('shiftReports'), window.fb.where('date','>=',cutoff));
+    const snap = await window.fb.getDocs(q);
+    snap.forEach(d => {
+      const data = d.data();
+      if(!data.date) return;
+      byDate[data.date] = byDate[data.date] || {};
+      byDate[data.date][data.shift] = {
+        tabSaved: data.tabSaved || {},
+        finalSubmitted: !!data.finalSubmitted
+      };
+    });
+  }catch(e){
+    console.warn('Failed to load report log from Firestore', e);
+  }
+
+  let html = '';
+  days.forEach(date => {
+    const shifts = [1,2,3];
+    let hasAny = false;
+    let shiftHtml = '';
+    shifts.forEach(s => {
+      const entry = byDate[date] && byDate[date][s];
+      let cls = 'ls-empty', lbl = SHIFT_NAMES[s].replace(' Shift','');
+      if(entry){
+        const anyTabSaved = SAVE_TABS.some(t=>entry.tabSaved?.[t]);
+        const allTabsSaved = SAVE_TABS.every(t=>entry.tabSaved?.[t]);
+        if(anyTabSaved) hasAny = true;
+        if(anyTabSaved && entry.finalSubmitted && allTabsSaved) cls = 'ls-saved';       // 🟢 all tabs + Final Submit done
+        else if(anyTabSaved) cls = 'ls-partial';                                        // 🟡 some tabs saved, not finalized
+        // else: no tab saved yet → stays 'ls-empty' (⚪), even if the doc exists
+      }
+      shiftHtml += `<span class="log-shift ${cls}" onclick="loadDateShift('${date}',${s})">${lbl}</span>`;
+    });
+    if(hasAny || date===today()) {
+      const df = new Date(date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+      html += `<div class="log-item"><div class="log-date">${df}</div><div class="log-shifts">${shiftHtml}</div></div>`;
+    }
+  });
+  el.innerHTML = html || '<div style="padding:10px 16px;font-size:12px;color:var(--muted2)">No saved reports yet</div>';
+}
+async function loadDateShift(date, shift) {
+  ss('shift_date',date); ss('shift_num',shift);
+  closeSB();
+  location.reload();
+}
+
+
+// ═══════════════════════════════════════════════════
+// EDIT BAR
+// ═══════════════════════════════════════════════════
+function editBar(tab, c) {
+  if(!SD.tabSaved?.[tab]) return;
+  const div = mkEl('div','edit-bar');
+  const isEdit = state.editMode[tab];
+  div.innerHTML = `<span>${isEdit?'Editing — save when done':'Report saved for this tab'}</span>
+    <button class="btn ${isEdit?'btn-green':'btn-ghost'} btn-sm" onclick="toggleEdit('${tab}')">${isEdit?'✓ Done':'✏️ Edit'}</button>`;
+  c.appendChild(div);
+}
+function toggleEdit(tab) { state.editMode[tab] = !state.editMode[tab]; renderTab(tab); }
+function isEditable(tab) { return !SD.tabSaved?.[tab] || !!state.editMode[tab]; }
+
+
+// ═══════════════════════════════════════════════════
+// COLLECT CURRENT TAB DATA (reads whichever of this tab's own
+// fields are present in the DOM into SD; harmless no-ops for
+// fields that live on a different page)
+// ═══════════════════════════════════════════════════
+function collectCurrentTab() {
+  const get = id => document.getElementById(id)?.value;
+  if(document.getElementById('sd-date')) {
+    const dv=get('sd-date'), sv=get('sd-shift'), iv=get('sd-ic');
+    if(dv){ss('shift_date',dv);SD.date=dv;}
+    if(sv){ss('shift_num',+sv);SD.shift=+sv;}
+    if(iv!==undefined){ss('shift_ic',iv);SD.ic=iv;}
+  }
+  const rw=get('rm-work'), ro=get('rm-other');
+  if(rw!==null&&rw!==undefined) SD.remarksWork=rw;
+  if(ro!==null&&ro!==undefined) SD.remarksOther=ro;
+  const prom=get('prod-rom');
+  if(prom!==null&&prom!==undefined) { SD.production=SD.production||{}; SD.production.rom=prom; }
+  const pfirst=get('prod-first-hour'), plast=get('prod-last-hour');
+  if(pfirst!==null&&pfirst!==undefined) { SD.production=SD.production||{}; SD.production.firstHour=pfirst; }
+  if(plast!==null&&plast!==undefined) { SD.production=SD.production||{}; SD.production.lastHour=plast; }
+}
+
+
+// ═══════════════════════════════════════════════════
+// CUMULATIVE REPORT
+// ═══════════════════════════════════════════════════
+// ── Date-selection helpers (all work on 'YYYY-MM-DD' strings in UTC,
+//    so results never shift with the device's timezone) ──
+const CUMUL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const CUMUL_MON_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const CUMUL_WEEK_LOOKBACK_YEARS = 2;   // Week list starts from 1 Jan of (current year − 2)
+const CUMUL_YEAR_LOOKBACK = 5;         // Year / Financial Year lists go back this many years
+
+function cuPad(n){ return String(n).padStart(2,'0'); }
+// Today's date in the device's local timezone (not UTC)
+function cuTodayISO(){ const d=new Date(); return `${d.getFullYear()}-${cuPad(d.getMonth()+1)}-${cuPad(d.getDate())}`; }
+function cuParse(iso){ const [y,m,d]=iso.split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); }
+function cuFmt(dt){ return `${dt.getUTCFullYear()}-${cuPad(dt.getUTCMonth()+1)}-${cuPad(dt.getUTCDate())}`; }
+function cuAddDays(iso,n){ const dt=cuParse(iso); dt.setUTCDate(dt.getUTCDate()+n); return cuFmt(dt); }
+// Monday of the week containing the given date (weeks run Monday → Sunday)
+function cuMonday(iso){ const dt=cuParse(iso); return cuAddDays(iso, -((dt.getUTCDay()+6)%7)); }
+// "21 Sep 2026"
+function cuLabel(iso){ const dt=cuParse(iso); return `${cuPad(dt.getUTCDate())} ${CUMUL_MON_ABBR[dt.getUTCMonth()]} ${dt.getUTCFullYear()}`; }
+// ISO-8601 week number of the week starting on the given Monday
+function cuWeekNo(mondayISO){
+  const thu=cuParse(cuAddDays(mondayISO,3));
+  const jan1=Date.UTC(thu.getUTCFullYear(),0,1);
+  return Math.floor((thu.getTime()-jan1)/86400000/7)+1;
+}
+// Financial year (1 Apr – 31 Mar) that a date falls in → its starting calendar year
+function cuFYStart(iso){ const dt=cuParse(iso); return dt.getUTCMonth()>=3 ? dt.getUTCFullYear() : dt.getUTCFullYear()-1; }
+
+function fillCumulSelectors(){
+  const t=cuTodayISO();
+  const curYear=+t.slice(0,4), curMonth=+t.slice(5,7);
+
+  // Week list — newest first, from the current week back to the start of the lookback window
+  const curMon=cuMonday(t);
+  let w=cuMonday(`${curYear-CUMUL_WEEK_LOOKBACK_YEARS}-01-01`);
+  const weeks=[];
+  while(w<=curMon){ weeks.push(w); w=cuAddDays(w,7); }
+  document.getElementById('cWeek').innerHTML=weeks.reverse().map(mon=>
+    `<option value="${mon}">Week ${cuWeekNo(mon)} (${cuLabel(mon)} – ${cuLabel(cuAddDays(mon,6))})</option>`).join('');
+
+  // Month mode — year + month
+  let yOpts='';
+  for(let y=curYear;y>=curYear-CUMUL_YEAR_LOOKBACK;y--) yOpts+=`<option value="${y}">${y}</option>`;
+  document.getElementById('cMonthYear').innerHTML=yOpts;
+  document.getElementById('cMonth').innerHTML=CUMUL_MONTHS.map((n,i)=>`<option value="${i+1}">${n}</option>`).join('');
+
+  // Year mode — financial years (1 Apr – 31 Mar)
+  const curFY=cuFYStart(t);
+  let fOpts='';
+  for(let y=curFY;y>=curFY-CUMUL_YEAR_LOOKBACK;y--) fOpts+=`<option value="${y}">April ${y} – March ${y+1}</option>`;
+  document.getElementById('cFY').innerHTML=fOpts;
+
+  setCumulDefaults('week'); setCumulDefaults('month'); setCumulDefaults('year');
+}
+
+// Select the current week / month / financial year in the given mode's controls
+function setCumulDefaults(mode){
+  const t=cuTodayISO();
+  if(mode==='week') document.getElementById('cWeek').value=cuMonday(t);
+  if(mode==='month'){
+    document.getElementById('cMonthYear').value=t.slice(0,4);
+    document.getElementById('cMonth').value=String(+t.slice(5,7));
+  }
+  if(mode==='year') document.getElementById('cFY').value=String(cuFYStart(t));
+}
+
+// Show only the controls for the selected mode
+function onCumulModeChange(){
+  const mode=document.getElementById('cMode').value;
+  if(mode!=='range') setCumulDefaults(mode);   // running week / month / FY is pre-selected on entering the mode
+  document.getElementById('cRangeField').style.display = mode==='range' ? '' : 'none';
+  document.getElementById('cWeekField').style.display  = mode==='week'  ? '' : 'none';
+  document.getElementById('cMonthField').style.display = mode==='month' ? '' : 'none';
+  document.getElementById('cYearField').style.display  = mode==='year'  ? '' : 'none';
+}
+
+// Resolve the active mode's controls into a {from, to} pair of YYYY-MM-DD strings
+// (returns null after showing a message if the selection is incomplete/invalid)
+function getCumulRange(){
+  const mode=document.getElementById('cMode')?.value || 'range';
+  if(mode==='week'){
+    const mon=document.getElementById('cWeek').value;
+    if(!mon){showToast('Select a week','err');return null;}
+    return {from:mon, to:cuAddDays(mon,6)};
+  }
+  if(mode==='month'){
+    const y=+document.getElementById('cMonthYear').value, m=+document.getElementById('cMonth').value;
+    if(!y||!m){showToast('Select a year and month','err');return null;}
+    const lastDay=new Date(Date.UTC(y,m,0)).getUTCDate();
+    return {from:`${y}-${cuPad(m)}-01`, to:`${y}-${cuPad(m)}-${cuPad(lastDay)}`};
+  }
+  if(mode==='year'){
+    const y=+document.getElementById('cFY').value;
+    if(!y){showToast('Select a financial year','err');return null;}
+    return {from:`${y}-04-01`, to:`${y+1}-03-31`};
+  }
+  // Date Range — same From/To behaviour as view-attendance.html
+  const from=document.getElementById('cf')?.value, to=document.getElementById('ct')?.value;
+  if(!from||!to){showToast('Select from and to dates','err');return null;}
+  if(from>to){
+    const msg='Invalid date range. "From Date" must be earlier than or equal to "To Date".';
+    showToast(msg,'err');
+    const res=document.getElementById('cumul-results');
+    if(res) res.innerHTML=`<div class="card" style="margin-top:10px"><p style="color:var(--red);font-size:13px">${msg}</p></div>`;
+    return null;
+  }
+  return {from,to};
+}
+
+function renderCumulative(c){
+  const card=mkEl('div','card');
+  const t=today();
+  // default: last 7 days
+  const weekAgo=new Date(); weekAgo.setDate(weekAgo.getDate()-6);
+  const wAgoStr=weekAgo.toISOString().split('T')[0];
+  card.innerHTML=`<div class="card-title">📊 Cumulative Report</div>
+    <div class="fg"><label>Mode</label>
+      <select id="cMode" onchange="onCumulModeChange()">
+        <option value="range" selected>Date Range</option>
+        <option value="week">Week</option>
+        <option value="month">Month</option>
+        <option value="year">Year</option>
+      </select>
+    </div>
+    <div class="gr2" id="cRangeField">
+      <div class="fg"><label>From</label><input type="date" id="cf" value="${wAgoStr}"></div>
+      <div class="fg"><label>To</label><input type="date" id="ct" value="${t}"></div>
+    </div>
+    <div class="fg" id="cWeekField" style="display:none"><label>Week</label><select id="cWeek"></select></div>
+    <div class="gr2" id="cMonthField" style="display:none">
+      <div class="fg"><label>Year</label><select id="cMonthYear"></select></div>
+      <div class="fg"><label>Month</label><select id="cMonth"></select></div>
+    </div>
+    <div class="fg" id="cYearField" style="display:none"><label>Financial Year</label><select id="cFY"></select></div>
+    <div class="btn-row"><button class="btn btn-primary" onclick="loadCumul()">Generate Report</button></div>`;
+  c.appendChild(card);
+  const res=mkEl('div'); res.id='cumul-results'; c.appendChild(res);
+  fillCumulSelectors();
+}
+
+// ── Shovel Trips helpers ──
+function cuEsc(str){
+  return String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+// Machinery/shovel name for an ID — same rule as machineryDisplayName() in production.html
+function cuMachineryName(id){
+  if(!id) return '—';
+  const m=resources.machinery.find(x=>x.id===id);
+  return m?.name || id;
+}
+// A machine's position in the resources.machinery master list — the shared sort/group key every
+// cumulative table (Shovel/Dumper/Drill Trips, Machinery Performance) orders its rows by.
+// Top-level (not local to loadCumul) so the Machinery Performance dropdown's re-render can use it too.
+function cuMasterIdx(id){
+  const i=resources.machinery.findIndex(m=>m.id===id);
+  return i<0?Infinity:i;
+}
+// A shift counts as fully submitted (🟢 in the Report Log) when every tab is saved AND Final Submit is done.
+// Same condition renderDateLog() uses for the green 'ls-saved' state.
+function cuIsFullySubmitted(d){
+  const ts=d.tabSaved||{};
+  return SAVE_TABS.some(t=>ts[t]) && !!d.finalSubmitted && SAVE_TABS.every(t=>ts[t]);
+}
+// One shovel row's ROM / Waste / SP trips — same figures the Shovel-wise Trip Summary shows in
+// production.html (shovelTotals): the sum of that shovel's dumper rows. Rows saved before the
+// per-dumper breakdown existed only carry romTrips/wasteTrips/spTrips, so fall back to those.
+function cuShovelRowTotals(row){
+  if(Array.isArray(row?.dumpers)){
+    const sum=k=>row.dumpers.reduce((a,d)=>a+(+d?.[k]||0),0);
+    return {rom:sum('rom'), waste:sum('waste'), sp:sum('sp')};
+  }
+  return {rom:+row?.romTrips||0, waste:+row?.wasteTrips||0, sp:+row?.spTrips||0};
+}
+// Dumper entries of one shovel row — the data production.html's Dumper-wise Trip Summary is built from.
+// Rows saved before the per-dumper breakdown existed only carry romTrips/wasteTrips/spTrips; production
+// turns those into one dumper-less entry, so do the same here.
+function cuShovelRowDumpers(row){
+  if(Array.isArray(row?.dumpers)) return row.dumpers;
+  const rom=+row?.romTrips||0, waste=+row?.wasteTrips||0, sp=+row?.spTrips||0;
+  return (rom+waste+sp)>0 ? [{dumper:'',rom,waste,sp}] : [];
+}
+// ── Machinery Performance helpers ──
+// Categories the "Select machinery type" dropdown covers, in the exact group order the report must show
+// under "All" (matches MACH_CATS' first six entries in machinery.html). Light Vehicle/Other are out of scope.
+const CU_MACH_TYPES = ['Shovel','Dumper','Drill','Rock Breaker','Water Sprinkler','Dozer'];
+// Filled by loadCumul() each time a report is generated; re-used (not re-fetched) when the dropdown changes.
+let cuMachRaw = {};              // {machineId: {sched,avl,utl,bd,idle}}
+let cuMachShiftCounts = {submitted:0, all:0};
+// A machine's normalized category — same case/whitespace-insensitive match machinery.html's normMachGroup()
+// does — or null if it isn't one of the six types this card covers (so it's left out entirely, incl. "All").
+function cuMachType(mid){
+  const m=resources.machinery.find(x=>x.id===mid);
+  const raw=String(m?.group||'').trim();
+  return CU_MACH_TYPES.find(cat=>cat.toLowerCase()===raw.toLowerCase()) || null;
+}
+// Zero-safe percentage: 0 (never NaN/Infinity) when the denominator is 0 or missing.
+function cuSafePct(num,den){ return den>0 ? (num/den*100) : 0; }
+function cuPctStr(num,den){ return cuSafePct(num,den).toFixed(1)+'%'; }
+// Rows for the selected type, in display order: under "All", grouped by CU_MACH_TYPES order (Shovel, Dumper,
+// Drill, Rock Breaker, Water Sprinkler, Dozer) with no mixing between groups; within a group/type, machinery
+// master-list order (same convention as the Shovel/Dumper Trips tables).
+function cuMachRowsForType(type){
+  const ids=Object.keys(cuMachRaw).filter(mid=>{
+    const t=cuMachType(mid);
+    return t && (type==='all' || t===type);
+  });
+  ids.sort((a,b)=>{
+    if(type==='all'){
+      const ta=CU_MACH_TYPES.indexOf(cuMachType(a)), tb=CU_MACH_TYPES.indexOf(cuMachType(b));
+      if(ta!==tb) return ta-tb;
+    }
+    return cuMasterIdx(a)-cuMasterIdx(b);
+  });
+  return ids.map(mid=>({mid, type:cuMachType(mid), ...cuMachRaw[mid]}));
+}
+// Builds the stat boxes + Machinery-wise table for the given type ('all' or one of CU_MACH_TYPES). Called once
+// for the initial "All" view, and again (client-side, no re-fetch) whenever the dropdown changes.
+function cuRenderMachPerf(type){
+  const rows=cuMachRowsForType(type);
+  const tot={sched:0,avl:0,utl:0,bd:0,idle:0};
+  rows.forEach(r=>{tot.sched+=r.sched;tot.avl+=r.avl;tot.utl+=r.utl;tot.bd+=r.bd;tot.idle+=r.idle;});
+  // Totals-of-totals, not an average of each row's own percentage.
+  const availPct=cuSafePct(tot.avl,tot.sched), utilPct=cuSafePct(tot.utl,tot.avl);
+
+  let out=`<div class="stat-grid g3 cumul-prod-grid" style="margin-bottom:8px">
+    <div class="stat-box"><div class="stat-lbl">Total Sched. Hrs</div><div class="stat-val">${tot.sched}</div></div>
+    <div class="stat-box"><div class="stat-lbl">Total Avl. Hrs</div><div class="stat-val">${tot.avl}</div></div>
+    <div class="stat-box"><div class="stat-lbl">Total Utl. Hrs</div><div class="stat-val">${tot.utl}</div></div>
+  </div>
+  <div class="stat-grid g3 cumul-prod-grid" style="margin-bottom:8px">
+    <div class="stat-box"><div class="stat-lbl">Total B/D Hrs</div><div class="stat-val" style="color:var(--red)">${tot.bd}</div></div>
+    <div class="stat-box"><div class="stat-lbl">Total Idle Hrs</div><div class="stat-val" style="color:var(--orange)">${tot.idle}</div></div>
+    <div class="stat-box">
+      <div style="font-size:12px;margin-top:4px">M/C Avail.: <b style="color:#ffd700">${availPct.toFixed(1)}%</b></div>
+      <div style="font-size:12px;margin-top:2px">M/C Util. On Avail.: <b style="color:#ffd700">${utilPct.toFixed(1)}%</b></div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Fully submitted shifts only (${cuMachShiftCounts.submitted} of ${cuMachShiftCounts.all} shifts in this range)</div>`;
+
+  let rowsHtml='', lastType=null;
+  rows.forEach((r,i)=>{
+    if(type==='all' && r.type!==lastType){
+      lastType=r.type;
+      rowsHtml+=`<tr><td colspan="9" style="font-weight:700;background:var(--surface2);font-size:11px">${lastType}s</td></tr>`;
+    }
+    rowsHtml+=`<tr><td style="text-align:center">${i+1}</td>
+      <td>${cuEsc(cuMachineryName(r.mid))}</td>
+      <td class="num-cell">${r.sched}</td>
+      <td class="num-cell">${r.avl}</td>
+      <td class="num-cell">${r.utl}</td>
+      <td class="num-cell" style="color:var(--red)">${r.bd}</td>
+      <td class="num-cell" style="color:var(--orange)">${r.idle}</td>
+      <td class="num-cell">${cuPctStr(r.avl,r.sched)}</td>
+      <td class="num-cell">${cuPctStr(r.utl,r.avl)}</td></tr>`;
+  });
+  if(rows.length){
+    const c='style="font-weight:700;background:var(--surface2)"';
+    rowsHtml+=`<tr>
+      <td ${c}></td><td ${c}>Total</td>
+      <td class="num-cell" ${c}>${tot.sched}</td>
+      <td class="num-cell" ${c}>${tot.avl}</td>
+      <td class="num-cell" ${c}>${tot.utl}</td>
+      <td class="num-cell" ${c}>${tot.bd}</td>
+      <td class="num-cell" ${c}>${tot.idle}</td>
+      <td class="num-cell" ${c}>${availPct.toFixed(1)}%</td>
+      <td class="num-cell" ${c}>${utilPct.toFixed(1)}%</td></tr>`;
+  } else {
+    rowsHtml='<tr><td colspan="9" style="text-align:center;color:var(--muted)">No machinery performance data from fully submitted shifts in this range</td></tr>';
+  }
+
+  out+=`<div class="tw"><table>
+    <thead>
+      <tr><th style="text-align:center">S. No.</th><th>Machinery</th><th style="text-align:center">Sched. Hrs</th><th style="text-align:center">Avl. Hrs</th><th style="text-align:center">Utl. Hrs</th><th style="text-align:center">B/D Hrs</th><th style="text-align:center">Idle Hrs</th><th style="text-align:center">Avl. %</th><th style="text-align:center">Utl. on Avl. %</th></tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table></div>`;
+  return out;
+}
+// Dropdown handler — re-filters the already-fetched cuMachRaw data and swaps just this section's markup;
+// the rest of the cumulative report (and the fully-submitted-shift filter itself) is untouched.
+function cuOnMachTypeChange(){
+  const type=document.getElementById('cMachType').value;
+  document.getElementById('cumul-mach-wrap').innerHTML=cuRenderMachPerf(type);
+}
+
+// One drill row's holes/meterage — same rule drilling.html uses (drillTotals(), plus its
+// legacy-row normalization at renderDrillingTab()): sum of its nested hole/depth rows, with a
+// row saved before that nested breakdown existed (bare holes/depth) treated as a single entry.
+function cuDrillRowTotals(row){
+  const rows = Array.isArray(row?.rows) ? row.rows : ((+row?.holes||0)>0 ? [{holes:row.holes,depth:row.depth}] : []);
+  const holes=rows.reduce((s,r)=>s+(+r?.holes||0),0);
+  const meters=rows.reduce((s,r)=>s+(+r?.holes||0)*(+r?.depth||0),0);
+  return {holes, meters};
+}
+
+async function loadCumul(){
+  const range=getCumulRange();
+  if(!range) return;
+  const fromStr=range.from, toStr=range.to;
+  const res=document.getElementById('cumul-results');
+  if(!res) return;
+
+  res.innerHTML='<div class="card" style="margin-top:10px"><p style="color:var(--muted);font-size:13px">Loading…</p></div>';
+
+  // Aggregate all shift reports in range, from Firestore
+  let allSD=[];
+  try{
+    const q=window.fb.query(fbCol('shiftReports'), window.fb.where('date','>=',fromStr), window.fb.where('date','<=',toStr));
+    const snap=await window.fb.getDocs(q);
+    snap.forEach(d=>allSD.push(d.data()));
+  }catch(e){
+    res.innerHTML=`<div class="card" style="margin-top:10px"><p style="color:var(--red);font-size:13px">Failed to load report data: ${e.message}</p></div>`;
+    return;
+  }
+
+  if(!allSD.length){res.innerHTML='<div class="card" style="margin-top:10px"><p style="color:var(--muted);font-size:13px">No saved data in this range.</p></div>';return;}
+
+  // ── 1. PRODUCTION TOTALS ──
+  const romTotal=allSD.reduce((s,d)=>s+(+d.production?.rom||0),0);
+  const wasteTotal=allSD.reduce((s,d)=>s+(+d.production?.waste||0),0);
+  const spTotal=allSD.reduce((s,d)=>s+(+d.production?.sp||0),0);
+
+  // ── 2. TRIPS ──
+  // Shovel-wise Trip Summary — totals per shovel across every date & shift (1st, 2nd, Night) in the range,
+  // using only fully submitted shifts (🟢 in the Report Log). Partly saved shifts are left out.
+  const submittedSD=allSD.filter(cuIsFullySubmitted);
+  const shovelTrips={}; // {shovelId: {rom,waste,sp}}
+  submittedSD.forEach(d=>{
+    (d.shovelRows||[]).forEach(r=>{
+      const sid=r?.shovel||'';
+      const t=cuShovelRowTotals(r);
+      if(!shovelTrips[sid]) shovelTrips[sid]={rom:0,waste:0,sp:0};
+      shovelTrips[sid].rom+=t.rom; shovelTrips[sid].waste+=t.waste; shovelTrips[sid].sp+=t.sp;
+    });
+  });
+
+  // Shovel Operator/Helper Trips — from the same shovel rows as the Shovel-wise Trip Summary in production.html,
+  // fully submitted shifts only. The shovel's full ROM/Waste/SP trips are credited to BOTH its operator and its
+  // helper (never split), and a person who was operator in one shift and helper in another is merged under one name.
+  const shovelOpTrips={}; // {employeeName: {rom,waste,sp}}
+  submittedSD.forEach(d=>{
+    (d.shovelRows||[]).forEach(r=>{
+      const t=cuShovelRowTotals(r);
+      // Set: if the same name is in both slots of one row, the trips are still credited once
+      const names=new Set([r?.operator,r?.helper].map(n=>String(n??'').trim().replace(/\s+/g,' ')).filter(Boolean));
+      names.forEach(n=>{
+        if(!shovelOpTrips[n]) shovelOpTrips[n]={rom:0,waste:0,sp:0};
+        shovelOpTrips[n].rom+=t.rom; shovelOpTrips[n].waste+=t.waste; shovelOpTrips[n].sp+=t.sp;
+      });
+    });
+  });
+
+  // Shift-wise Trips — for each fully submitted date & shift, the trips shown in the Totals card of
+  // production.html (the sum of every shovel's ROM / Waste / SP trips), added up per shift across the range.
+  const shiftTrips={1:{rom:0,waste:0,sp:0},2:{rom:0,waste:0,sp:0},3:{rom:0,waste:0,sp:0}};
+  submittedSD.forEach(d=>{
+    const st=shiftTrips[+d.shift];
+    if(!st) return;
+    (d.shovelRows||[]).forEach(r=>{
+      const t=cuShovelRowTotals(r);
+      st.rom+=t.rom; st.waste+=t.waste; st.sp+=t.sp;
+    });
+  });
+
+  // Dumper-wise Trips — per dumper, from the dumper rows under every shovel (what the Dumper-wise Trip Summary
+  // in production.html is built from), added up across every date & shift in the range.
+  // Fully submitted shifts only (🟢 in the Report Log).
+  const dumperTrips={}; // {dumperId: {rom,waste,sp}}
+  submittedSD.forEach(d=>{
+    (d.shovelRows||[]).forEach(r=>{
+      cuShovelRowDumpers(r).forEach(x=>{
+        const rom=+x?.rom||0, waste=+x?.waste||0, sp=+x?.sp||0;
+        const did=x?.dumper||'';
+        if(!did && !(rom||waste||sp)) return;   // empty placeholder row
+        if(!dumperTrips[did]) dumperTrips[did]={rom:0,waste:0,sp:0};
+        dumperTrips[did].rom+=rom; dumperTrips[did].waste+=waste; dumperTrips[did].sp+=sp;
+      });
+    });
+  });
+
+  // Dumper Operator Trips — per dumper operator, from the dumper rows under every shovel (the data behind the
+  // Dumper-wise Trip Summary in production.html), added up across every date & shift in the range.
+  // Fully submitted shifts only (🟢 in the Report Log). Each dumper row is credited once, to its own operator;
+  // an operator on several dumpers/shifts is merged under a single name.
+  const dumperOpTrips={}; // {operatorName: {rom,waste,sp}}
+  submittedSD.forEach(d=>{
+    (d.shovelRows||[]).forEach(r=>{
+      cuShovelRowDumpers(r).forEach(x=>{
+        const op=String(x?.operator??'').trim().replace(/\s+/g,' ');
+        if(!op) return;   // no operator selected — nobody to credit
+        if(!dumperOpTrips[op]) dumperOpTrips[op]={rom:0,waste:0,sp:0};
+        dumperOpTrips[op].rom+=(+x.rom||0); dumperOpTrips[op].waste+=(+x.waste||0); dumperOpTrips[op].sp+=(+x.sp||0);
+      });
+    });
+  });
+
+  // ── 3. DRILLING ──
+  // Drill Holes/Meterage (Total + Drill-wise) — from the Drilling Meterage Summary in drilling.html,
+  // fully submitted shifts only (🟢 in the Report Log).
+  const drillData={}; // {drillId: {holes,meters}}
+  submittedSD.forEach(d=>{
+    (d.drillRows||[]).forEach(r=>{
+      const did=r?.drill||'';
+      const t=cuDrillRowTotals(r);
+      if(!did && !(t.holes||t.meters)) return;   // empty placeholder row
+      if(!drillData[did]) drillData[did]={holes:0,meters:0};
+      drillData[did].holes+=t.holes; drillData[did].meters+=t.meters;
+    });
+  });
+  const totalDrillH=Object.values(drillData).reduce((s,v)=>s+v.holes,0);
+  const totalDrillM=Object.values(drillData).reduce((s,v)=>s+v.meters,0);
+
+  // Shift-wise Holes/Meterage — per shift, fully submitted shifts only (🟢 in the Report Log).
+  const shiftDrill={1:{holes:0,meters:0},2:{holes:0,meters:0},3:{holes:0,meters:0}};
+  submittedSD.forEach(d=>{
+    const sd=shiftDrill[+d.shift];
+    if(!sd) return;
+    (d.drillRows||[]).forEach(r=>{
+      const t=cuDrillRowTotals(r);
+      sd.holes+=t.holes; sd.meters+=t.meters;
+    });
+  });
+
+  // Drill Operator/Helper Holes/Meterage — operator and helper each credited the drill's full
+  // holes/meterage (not split); a person in both slots, or across shifts, is merged under one name.
+  // Fully submitted shifts only.
+  const drillOpData={}; // {name: {holes,meters}}
+  submittedSD.forEach(d=>{
+    (d.drillRows||[]).forEach(r=>{
+      const t=cuDrillRowTotals(r);
+      const names=new Set([r?.operator,r?.helper].map(n=>String(n??'').trim().replace(/\s+/g,' ')).filter(Boolean));
+      names.forEach(n=>{
+        if(!drillOpData[n]) drillOpData[n]={holes:0,meters:0};
+        drillOpData[n].holes+=t.holes; drillOpData[n].meters+=t.meters;
+      });
+    });
+  });
+
+  // ── 4. MACHINERY ── Machinery Performance card — per machine, fully submitted shifts only (🟢 in the Report Log).
+  // Stored on the shared cuMachRaw/cuMachShiftCounts globals so the machinery-type dropdown can re-filter and
+  // re-render instantly, without a fresh fetch, when the user changes it after this report has loaded.
+  cuMachRaw={};
+  submittedSD.forEach(d=>{
+    Object.entries(d.machinery||{}).forEach(([mid,md])=>{
+      if(!cuMachRaw[mid]) cuMachRaw[mid]={sched:0,avl:0,utl:0,bd:0,idle:0};
+      const sched=+md.schedHrs||0, avl=+md.avlHrs||0, utl=+md.utlHrs||0;
+      cuMachRaw[mid].sched+=sched;
+      cuMachRaw[mid].avl+=avl;
+      cuMachRaw[mid].utl+=utl;
+      cuMachRaw[mid].bd+=Math.max(0,sched-avl);
+      cuMachRaw[mid].idle+=Math.max(0,avl-utl);
+    });
+  });
+  cuMachShiftCounts={submitted:submittedSD.length, all:allSD.length};
+
+  // ── 5. MANPOWER ──
+  const mpSummary={}; // {mpId: {name,role,present,absent}}
+  allSD.forEach(d=>{
+    Object.entries(d.attendance||{}).forEach(([id,status])=>{
+      const mp=resources.manpower.find(m=>m.id==id);
+      if(!mp) return;
+      if(!mpSummary[id]) mpSummary[id]={name:mp.name,role:mp.role,present:0,absent:0};
+      if(status==='P') mpSummary[id].present++;
+      if(status==='A') mpSummary[id].absent++;
+    });
+  });
+  const totalPresent=Object.values(mpSummary).reduce((s,v)=>s+v.present,0);
+  const totalAbsent=Object.values(mpSummary).reduce((s,v)=>s+v.absent,0);
+
+  // ── RENDER ──
+  const dfr=new Date(fromStr+'T00:00:00').toLocaleDateString('en-IN',fromStr.slice(0,4)!==toStr.slice(0,4)?{day:'2-digit',month:'short',year:'numeric'}:{day:'2-digit',month:'short'}); // include the year when the range spans two years
+  const dto=new Date(toStr+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+
+let html=`<div class="cumul-meta-bar">Report: <span class="pf-time">${dfr} – ${dto}</span> · <span class="pf-time">${allSD.length} shifts / ${submittedSD.length} shifts fully submitted</span></div>`;
+
+  // Production
+  html+=`<div class="cumul-section">📦 Production</div>
+  <div class="stat-grid g3 cumul-prod-grid" style="margin-bottom:10px">
+    <div class="stat-box"><div class="stat-lbl">ROM</div><div class="stat-val">${fmtN(romTotal)}</div><div class="stat-unit">MT</div></div>
+    <div class="stat-box"><div class="stat-lbl">Waste</div><div class="stat-val">${fmtN(wasteTotal)}</div><div class="stat-unit">MT</div></div>
+    <div class="stat-box"><div class="stat-lbl">Stockpile</div><div class="stat-val">${fmtN(spTotal)}</div><div class="stat-unit">MT</div></div>
+  </div>`;
+
+  // Trips - shovel-wise
+  // Same table markup/classes as the Shovel-wise Trip Summary in production.html (+ S. No. column and Total row)
+  const shovelIds=Object.keys(shovelTrips).sort((a,b)=>{
+    const ia=cuMasterIdx(a), ib=cuMasterIdx(b);
+    if(ia!==ib) return ia<ib?-1:1;          // machinery master-list order, unknown IDs last
+    return a<b?-1:a>b?1:0;
+  });
+  const shGrand={rom:0,waste:0,sp:0};
+  let shovelRowsHtml='';
+  shovelIds.forEach((id,i)=>{
+    const v=shovelTrips[id];
+    shGrand.rom+=v.rom; shGrand.waste+=v.waste; shGrand.sp+=v.sp;
+    shovelRowsHtml+=`<tr><td style="text-align:center">${i+1}</td>
+      <td>${cuEsc(cuMachineryName(id))}</td>
+      <td class="num-cell">${v.rom}</td>
+      <td class="num-cell">${v.waste}</td>
+      <td class="num-cell">${v.sp}</td>
+      <td class="num-cell">${v.rom+v.waste+v.sp}</td></tr>`;
+  });
+  if(shovelIds.length){
+    const totCell='style="font-weight:700;background:var(--surface2)"';
+    shovelRowsHtml+=`<tr>
+      <td ${totCell}></td>
+      <td ${totCell}>Total</td>
+      <td class="num-cell" ${totCell}>${shGrand.rom}</td>
+      <td class="num-cell" ${totCell}>${shGrand.waste}</td>
+      <td class="num-cell" ${totCell}>${shGrand.sp}</td>
+      <td class="num-cell" ${totCell}>${shGrand.rom+shGrand.waste+shGrand.sp}</td></tr>`;
+  } else {
+    shovelRowsHtml='<tr><td colspan="6" style="text-align:center;color:var(--muted)">No shovel trip data from fully submitted shifts in this range</td></tr>';
+  }
+  html+=`<div class="cumul-section">🚧 Shovel Trips</div>
+  <div style="font-size:11px;color:var(--muted)">Fully submitted shifts only (${submittedSD.length} of ${allSD.length} shifts in this range)</div>
+  <div class="tw"><table>
+    <thead><tr><th style="text-align:center">S. No.</th><th>Shovel</th><th style="text-align:center">ROM</th><th style="text-align:center">Waste</th><th style="text-align:center">SP</th><th style="text-align:center">Total</th></tr></thead>
+    <tbody>${shovelRowsHtml}</tbody>
+  </table></div>`;
+
+  // Trips - shovel operator-wise
+  // Ranked by total trips (highest first; ties in name order). S. No. follows the sorted order, top 3 get medal badges.
+  const opRanked=Object.entries(shovelOpTrips)
+    .map(([name,v])=>({name, rom:v.rom, waste:v.waste, sp:v.sp, total:v.rom+v.waste+v.sp}))
+    .sort((a,b)=>(b.total-a.total) || a.name.localeCompare(b.name));
+  let opRowsHtml=opRanked.map((v,i)=>{
+    const sno = i<3 ? `<span class="cumul-rank r${i+1}">${i+1}</span>` : (i+1);
+    return `<tr><td style="text-align:center">${sno}</td>
+      <td>${cuEsc(v.name)}</td>
+      <td class="num-cell">${v.rom}</td>
+      <td class="num-cell">${v.waste}</td>
+      <td class="num-cell">${v.sp}</td>
+      <td class="num-cell">${v.total}</td></tr>`;
+  }).join('');
+  if(!opRanked.length) opRowsHtml='<tr><td colspan="6" style="text-align:center;color:var(--muted)">No operator/helper trip data from fully submitted shifts in this range</td></tr>';
+  html+=`<div class="cumul-section" style="margin-top:10px">👷 Shovel Operator/Helper Trips</div>
+  <div style="font-size:11px;color:var(--muted)">Fully submitted shifts only (${submittedSD.length} of ${allSD.length} shifts in this range) · operator and helper are each credited the shovel's full trips</div>
+  <div class="tw"><table>
+    <thead><tr><th style="text-align:center">S. No.</th><th>Name</th><th style="text-align:center">ROM</th><th style="text-align:center">Waste</th><th style="text-align:center">SP</th><th style="text-align:center">Total</th></tr></thead>
+    <tbody>${opRowsHtml}</tbody>
+  </table></div>`;
+
+  // Shift-wise trips
+  const shiftGrand={rom:0,waste:0,sp:0};
+  let shiftRowsHtml='';
+  if(submittedSD.length){
+    [1,2,3].forEach((s,i)=>{
+      const v=shiftTrips[s];
+      shiftGrand.rom+=v.rom; shiftGrand.waste+=v.waste; shiftGrand.sp+=v.sp;
+      shiftRowsHtml+=`<tr><td style="text-align:center">${i+1}</td>
+        <td>${SHIFT_NAMES[s]}</td>
+        <td class="num-cell">${v.rom}</td>
+        <td class="num-cell">${v.waste}</td>
+        <td class="num-cell">${v.sp}</td>
+        <td class="num-cell">${v.rom+v.waste+v.sp}</td></tr>`;
+    });
+    const shiftTotCell='style="font-weight:700;background:var(--surface2)"';
+    shiftRowsHtml+=`<tr>
+      <td ${shiftTotCell}></td>
+      <td ${shiftTotCell}>Total</td>
+      <td class="num-cell" ${shiftTotCell}>${shiftGrand.rom}</td>
+      <td class="num-cell" ${shiftTotCell}>${shiftGrand.waste}</td>
+      <td class="num-cell" ${shiftTotCell}>${shiftGrand.sp}</td>
+      <td class="num-cell" ${shiftTotCell}>${shiftGrand.rom+shiftGrand.waste+shiftGrand.sp}</td></tr>`;
+  } else {
+    shiftRowsHtml='<tr><td colspan="6" style="text-align:center;color:var(--muted)">No shift trip data from fully submitted shifts in this range</td></tr>';
+  }
+  html+=`<div class="cumul-section" style="margin-top:10px">⏱ Shift-wise Trips</div>
+  <div style="font-size:11px;color:var(--muted)">Fully submitted shifts only (${submittedSD.length} of ${allSD.length} shifts in this range)</div>
+  <div class="tw"><table>
+    <thead><tr><th style="text-align:center">S. No.</th><th>Shift</th><th style="text-align:center">ROM</th><th style="text-align:center">Waste</th><th style="text-align:center">SP</th><th style="text-align:center">Total</th></tr></thead>
+    <tbody>${shiftRowsHtml}</tbody>
+  </table></div>`;
+
+  // Dumper-wise
+  const dumperIds=Object.keys(dumperTrips).sort((a,b)=>{
+    const ia=cuMasterIdx(a), ib=cuMasterIdx(b);
+    if(ia!==ib) return ia<ib?-1:1;          // machinery master-list order, unknown IDs last
+    return a<b?-1:a>b?1:0;
+  });
+  const dumperGrand={rom:0,waste:0,sp:0};
+  let dumperRowsHtml='';
+  dumperIds.forEach((id,i)=>{
+    const v=dumperTrips[id];
+    dumperGrand.rom+=v.rom; dumperGrand.waste+=v.waste; dumperGrand.sp+=v.sp;
+    dumperRowsHtml+=`<tr><td style="text-align:center">${i+1}</td>
+      <td>${cuEsc(cuMachineryName(id))}</td>
+      <td class="num-cell">${v.rom}</td>
+      <td class="num-cell">${v.waste}</td>
+      <td class="num-cell">${v.sp}</td>
+      <td class="num-cell">${v.rom+v.waste+v.sp}</td></tr>`;
+  });
+  if(dumperIds.length){
+    const dumperTotCell='style="font-weight:700;background:var(--surface2)"';
+    dumperRowsHtml+=`<tr>
+      <td ${dumperTotCell}></td>
+      <td ${dumperTotCell}>Total</td>
+      <td class="num-cell" ${dumperTotCell}>${dumperGrand.rom}</td>
+      <td class="num-cell" ${dumperTotCell}>${dumperGrand.waste}</td>
+      <td class="num-cell" ${dumperTotCell}>${dumperGrand.sp}</td>
+      <td class="num-cell" ${dumperTotCell}>${dumperGrand.rom+dumperGrand.waste+dumperGrand.sp}</td></tr>`;
+  } else {
+    dumperRowsHtml='<tr><td colspan="6" style="text-align:center;color:var(--muted)">No dumper trip data from fully submitted shifts in this range</td></tr>';
+  }
+  html+=`<div class="cumul-section" style="margin-top:10px">🚛 Dumper-wise Trips</div>
+  <div style="font-size:11px;color:var(--muted)">Fully submitted shifts only (${submittedSD.length} of ${allSD.length} shifts in this range)</div>
+  <div class="tw"><table>
+    <thead><tr><th style="text-align:center">S. No.</th><th>Dumper</th><th style="text-align:center">ROM</th><th style="text-align:center">Waste</th><th style="text-align:center">SP</th><th style="text-align:center">Total</th></tr></thead>
+    <tbody>${dumperRowsHtml}</tbody>
+  </table></div>`;
+
+  // Ranked by total trips (highest first; ties in name order). S. No. follows the sorted order, top 3 get medal badges.
+  const dOpRanked=Object.entries(dumperOpTrips)
+    .map(([name,v])=>({name, rom:v.rom, waste:v.waste, sp:v.sp, total:v.rom+v.waste+v.sp}))
+    .sort((a,b)=>(b.total-a.total) || a.name.localeCompare(b.name));
+  let dOpRowsHtml=dOpRanked.map((v,i)=>{
+    const sno = i<3 ? `<span class="cumul-rank r${i+1}">${i+1}</span>` : (i+1);
+    return `<tr><td style="text-align:center">${sno}</td>
+      <td>${cuEsc(v.name)}</td>
+      <td class="num-cell">${v.rom}</td>
+      <td class="num-cell">${v.waste}</td>
+      <td class="num-cell">${v.sp}</td>
+      <td class="num-cell">${v.total}</td></tr>`;
+  }).join('');
+  if(!dOpRanked.length) dOpRowsHtml='<tr><td colspan="6" style="text-align:center;color:var(--muted)">No dumper operator trip data from fully submitted shifts in this range</td></tr>';
+  html+=`<div class="cumul-section" style="margin-top:10px">👤 Dumper Operator Trips</div>
+  <div style="font-size:11px;color:var(--muted)">Fully submitted shifts only (${submittedSD.length} of ${allSD.length} shifts in this range)</div>
+  <div class="tw"><table>
+    <thead><tr><th style="text-align:center">S. No.</th><th>Operator</th><th style="text-align:center">ROM</th><th style="text-align:center">Waste</th><th style="text-align:center">SP</th><th style="text-align:center">Total</th></tr></thead>
+    <tbody>${dOpRowsHtml}</tbody>
+  </table></div>`;
+
+  // Drilling
+  html+=`<div class="cumul-section">🔩 Drill Holes/Meterage</div>
+  <div class="stat-grid" style="margin-bottom:8px">
+    <div class="stat-box"><div class="stat-lbl">Total Holes</div><div class="stat-val">${totalDrillH}</div></div>
+    <div class="stat-box"><div class="stat-lbl">Total Meterage</div><div class="stat-val">${totalDrillM}</div><div class="stat-unit">m</div></div>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Fully submitted shifts only (${submittedSD.length} of ${allSD.length} shifts in this range)</div>`;
+  const drillIds=Object.keys(drillData).sort((a,b)=>{
+    const ia=cuMasterIdx(a), ib=cuMasterIdx(b);
+    if(ia!==ib) return ia<ib?-1:1;          // machinery master-list order, unknown IDs last
+    return a<b?-1:a>b?1:0;
+  });
+  const drillGrand={holes:0,meters:0};
+  let drillRowsHtml='';
+  drillIds.forEach((id,i)=>{
+    const v=drillData[id];
+    drillGrand.holes+=v.holes; drillGrand.meters+=v.meters;
+    drillRowsHtml+=`<tr><td style="text-align:center">${i+1}</td>
+      <td>${cuEsc(cuMachineryName(id))}</td>
+      <td class="num-cell">${v.holes}</td>
+      <td class="num-cell">${v.meters}</td></tr>`;
+  });
+  if(drillIds.length){
+    const drillTotCell='style="font-weight:700;background:var(--surface2)"';
+    drillRowsHtml+=`<tr>
+      <td ${drillTotCell}></td>
+      <td ${drillTotCell}>Total</td>
+      <td class="num-cell" ${drillTotCell}>${drillGrand.holes}</td>
+      <td class="num-cell" ${drillTotCell}>${drillGrand.meters}</td></tr>`;
+  } else {
+    drillRowsHtml='<tr><td colspan="4" style="text-align:center;color:var(--muted)">No drill hole/meterage data from fully submitted shifts in this range</td></tr>';
+  }
+  html+=`<div class="tw"><table>
+    <thead><tr><th style="text-align:center">S. No.</th><th>Drill</th><th style="text-align:center">Total Holes</th><th style="text-align:center">Total Meterage (m)</th></tr></thead>
+    <tbody>${drillRowsHtml}</tbody>
+  </table></div>`;
+
+  const shiftDrillGrand={holes:0,meters:0};
+  let shiftDrillRowsHtml='';
+  if(submittedSD.length){
+    [1,2,3].forEach((s,i)=>{
+      const v=shiftDrill[s];
+      shiftDrillGrand.holes+=v.holes; shiftDrillGrand.meters+=v.meters;
+      shiftDrillRowsHtml+=`<tr><td style="text-align:center">${i+1}</td>
+        <td>${SHIFT_NAMES[s]}</td>
+        <td class="num-cell">${v.holes}</td>
+        <td class="num-cell">${v.meters}</td></tr>`;
+    });
+    const sdTotCell='style="font-weight:700;background:var(--surface2)"';
+    shiftDrillRowsHtml+=`<tr>
+      <td ${sdTotCell}></td>
+      <td ${sdTotCell}>Total</td>
+      <td class="num-cell" ${sdTotCell}>${shiftDrillGrand.holes}</td>
+      <td class="num-cell" ${sdTotCell}>${shiftDrillGrand.meters}</td></tr>`;
+  } else {
+    shiftDrillRowsHtml='<tr><td colspan="4" style="text-align:center;color:var(--muted)">No shift hole/meterage data from fully submitted shifts in this range</td></tr>';
+  }
+  html+=`<div class="cumul-section" style="margin-top:10px">⏱ Shift-wise Holes/Meterage</div>
+  <div style="font-size:11px;color:var(--muted)">Fully submitted shifts only (${submittedSD.length} of ${allSD.length} shifts in this range)</div>
+  <div class="tw"><table>
+    <thead><tr><th style="text-align:center">S. No.</th><th>Shift</th><th style="text-align:center">Holes</th><th style="text-align:center">Meterage (m)</th></tr></thead>
+    <tbody>${shiftDrillRowsHtml}</tbody>
+  </table></div>`;
+
+  // Ranked by meterage (the headline drilling-output figure, same as the Total Meterage stat above) —
+  // highest first, ties in name order. S. No. follows the sorted order, top 3 get medal badges.
+  const drillOpRanked=Object.entries(drillOpData)
+    .map(([name,v])=>({name, holes:v.holes, meters:v.meters}))
+    .sort((a,b)=>(b.meters-a.meters) || a.name.localeCompare(b.name));
+  let drillOpRowsHtml=drillOpRanked.map((v,i)=>{
+    const sno = i<3 ? `<span class="cumul-rank r${i+1}">${i+1}</span>` : (i+1);
+    return `<tr><td style="text-align:center">${sno}</td>
+      <td>${cuEsc(v.name)}</td>
+      <td class="num-cell">${v.holes}</td>
+      <td class="num-cell">${v.meters}</td></tr>`;
+  }).join('');
+  if(!drillOpRanked.length) drillOpRowsHtml='<tr><td colspan="4" style="text-align:center;color:var(--muted)">No drill operator/helper hole/meterage data from fully submitted shifts in this range</td></tr>';
+  html+=`<div class="cumul-section" style="margin-top:10px">👷 Drill Operator/Helper Holes/Meterage</div>
+  <div style="font-size:11px;color:var(--muted)">Fully submitted shifts only (${submittedSD.length} of ${allSD.length} shifts in this range) · operator and helper are each credited the drill's full holes/meterage</div>
+  <div class="tw"><table>
+    <thead><tr><th style="text-align:center">S. No.</th><th>Name</th><th style="text-align:center">Holes</th><th style="text-align:center">Meterage (m)</th></tr></thead>
+    <tbody>${drillOpRowsHtml}</tbody>
+  </table></div>`;
+
+  // Machinery
+  html+=`<div class="cumul-section">⚙️ Machinery Performance</div>
+  <div class="fg" style="max-width:280px"><label>Select machinery type</label>
+    <select id="cMachType" onchange="cuOnMachTypeChange()">
+      <option value="all" selected>All</option>
+      <option value="Shovel">Shovel</option>
+      <option value="Dumper">Dumper</option>
+      <option value="Drill">Drill</option>
+      <option value="Rock Breaker">Rock Breaker</option>
+      <option value="Water Sprinkler">Water Sprinkler</option>
+      <option value="Dozer">Dozer</option>
+    </select>
+  </div>
+  <div id="cumul-mach-wrap">${cuRenderMachPerf('all')}</div>`;
+
+  html+=`<div style="height:30px"></div>`;
+
+  res.innerHTML=html;
+}
+
+
+// ═══════════════════════════════════════════════════
+// SAVE LOGIC
+// ═══════════════════════════════════════════════════
+async function saveTab(tab){
+  collectCurrentTab();
+  if(tab==='production' && !validateTrips()){
+    showToast('Shovel trips and dumper trips must match before saving','err');
+    return;
+  }
+  SD.tabSaved=SD.tabSaved||{};
+  SD.tabSaved[tab]=true;
+  state.editMode[tab]=false;
+  const ok = await saveSD();
+  showToast(ok ? `${TAB_LABELS[tab]||tab} saved ✓` : `Save failed — check your connection`, ok?'ok':'err');
+  buildTabs();
+  renderTab(tab);
+  await renderDateLog();
+}
+
+
+
+// ═══════════════════════════════════════════════════
+// LOADING OVERLAY
+// ═══════════════════════════════════════════════════
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function showLoadingScreen(){const ov=document.getElementById('loading-overlay');if(ov)ov.style.display='flex';}
+function hideLoadingScreen(){const ov=document.getElementById('loading-overlay');if(ov)ov.style.display='none';}
+
+
+// ═══════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════
+function mkEl(tag,cls,id){const el=document.createElement(tag);if(cls)el.className=cls;if(id)el.id=id;return el;}
+function fmtN(n){if(!n&&n!==0)return'0';return parseFloat(n).toLocaleString('en-IN');}
+function showToast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} on`;setTimeout(()=>t.className='toast',3200);}
+
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.VANTA) {
+      window.VANTA.FOG({
+        el: "#vanta-bg",
+        mouseControls: true,
+        touchControls: true,
+        gyroControls: false,
+        minHeight: 200.00,
+        minWidth: 200.00,
+        highlightColor: 0x0d0f14,
+        midtoneColor: 0xffffff,
+        lowlightColor: 0x181e2a,
+        baseColor: 0x0d0f14,
+        blurFactor: 0.48,
+        speed: 0.20,
+        zoom: 0.15
+      });
+    }
+  });
+</script>
+
+</body>
+</html>
